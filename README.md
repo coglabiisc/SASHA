@@ -20,10 +20,10 @@ with exceptionally large images containing sparsely informative features.
 
 ## 👨‍💻 Authors
 
-- [Tarun Gogisetty](https://github.com/GT657)
-- [Naman Malpani](https://github.com/Naman2399)
-- Prof. Sridharan Devarajan
-- Prof. Gugan Thoppe
+- [Tarun Gogisetty](mailto:tarung@iisc.ac.in)
+- [Naman Malpani](mailto:namanmalpani@iisc.ac.in)
+- [Prof. Gugan Thoppe](mailto:gthoppe@iisc.ac.in)
+- [Prof. Sridharan Devarajan](mailto:sridhar@iisc.ac.in)
 
 ## Overview 
 
