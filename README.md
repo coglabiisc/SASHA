@@ -27,7 +27,7 @@ with exceptionally large images containing sparsely informative features.
 
 ## Overview 
 
-[Semantic Diagram](images/overview.png)
+![Semantic Diagram](images/overview.png)
 
 ## Results
 
