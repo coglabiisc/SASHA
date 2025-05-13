@@ -2,3 +2,4 @@
 commands.txt
 config
 outputs
+*.pyc
