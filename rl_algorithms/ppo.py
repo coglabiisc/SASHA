@@ -138,30 +138,31 @@ class Agent(nn.Module):
     #
     #     return action, torch.max(dist.probs).detach().cpu(), dist.entropy()  # TODO : Need to replace the sec value with log_prob
 
-    def get_action(self, x, visited_patch_ids, is_eval=False, is_top_k = False, is_top_p = False, seed = 1):
+    def get_action(self, x, visited_patch_ids, is_eval=False, is_top_k = False, is_top_p = False):
         A_raw = self.actor(x).view(1, -1)
         A_raw[0][visited_patch_ids] = -torch.inf
         dist = Categorical(logits=A_raw)
 
 
-        # TODO : This code is added for random policy
+        # This code is added for random policy (Uncomment if need to execute this)
         # Sample Randomly from the patches --->
         # N = A_raw.shape[1]
         # all_indices = list(range(N))
         # remaining_indices = list(set(all_indices) - set(visited_patch_ids))
-        # random.seed(seed)
         # random_patch = random.choice(remaining_indices)
         # return torch.tensor(random_patch), None , None
 
-        # TODO : Making changes based on different ways to sample patches at inference stage
-        # New Code Proposed
+        # Get action based on different sampling strategy ----
+        # By default we will follow pick the max from probability distribution for SASHA inference
+
         if is_eval :
             # Now check which flag is up
             if is_top_k and is_top_p :
                 raise ValueError("Only one of is_top_k or is_top_p can be True")
 
             elif is_top_k and not is_top_p :
-                k = 3  # or 3
+
+                k = 3  # or 3 / 5 ----> determine top_k to be unmasked
                 A_raw = A_raw.squeeze()
                 topk_vals, topk_idxs = torch.topk(A_raw, k)
                 probs = torch.zeros_like(A_raw)
@@ -170,6 +171,7 @@ class Agent(nn.Module):
                 action = dist.sample()
 
             elif not is_top_k and is_top_p:
+
                 p = 0.3
                 A_raw = A_raw.squeeze()
                 sorted_logits, sorted_indices = torch.sort(A_raw, descending=True)
@@ -190,13 +192,10 @@ class Agent(nn.Module):
                 action = dist.sample()
 
             else :
-                action = torch.argmax(dist.probs)
+                action = torch.argmax(dist.probs)  # This is the by default choice for the inference mode
 
         else :
             action = dist.sample() # This is performed during training
-
-        # Original Code
-        # action = torch.argmax(dist.probs) if is_eval else dist.sample()
 
         # Continue ....
         log_prob = dist.log_prob(action)
