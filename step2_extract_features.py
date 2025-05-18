@@ -99,7 +99,7 @@ def plot_single_image(image, file_name=None, figsize=(6, 6)):
     plt.savefig(file_name)
 
 
-def compute_w_loader(loader, model, verbose=0):
+def compute_w_loader(loader, model, verbose=0, extract_high_res_features = True, device = 'cpu' ):
     """
 	args:
 		output_path: directory to save computed features (.h5 file)
@@ -125,7 +125,7 @@ def compute_w_loader(loader, model, verbose=0):
     for count, data in enumerate(tqdm(loader)):
         with torch.inference_mode():
 
-            if args.extract_high_res_features:
+            if extract_high_res_features:
                 # Need to write Logic for this part
 
                 hr_img = data['hr_img']
@@ -190,7 +190,7 @@ def compute_w_loader(loader, model, verbose=0):
                 total_time_feat =  time_1.sum().item() + end_time_feat - state_time_feat
                 total_time_list.append(total_time_feat)
 
-    if args.extract_high_res_features:
+    if extract_high_res_features:
         hr_features = torch.cat(hr_features_list, dim=0).numpy()
         lr_features = torch.cat(lr_features_list, dim=0).numpy()
         hr_coords = np.concatenate(hr_coords_list, axis=0)

@@ -287,27 +287,20 @@ def build_HDF5_feat_dataset(file_path, conf):
         return HDF5_feat_dataset2(train_split, train_names), HDF5_feat_dataset2(val_split, val_names), HDF5_feat_dataset2(test_split, test_names)
     elif conf.dataset == 'lct':
         train_split, train_names, val_split, val_names, test_split, test_names = split_dataset_lct(file_path, conf)
-        # save_dir = 'splits/%s' % conf.dataset
-        # os.makedirs(save_dir, exist_ok=True)
-        # json.dump({'train_names': train_names, 'val_names': val_names, 'test_names': test_names},
-        #           open(os.path.join(save_dir, 'split_%s.json' % conf.seed), 'w'))
-        # sys.exit()
         train_split, train_names = generate_fewshot_dataset(train_split, train_names, num_shots=conf.n_shot)
         return HDF5_feat_dataset2(train_split, train_names), HDF5_feat_dataset2(val_split, val_names), HDF5_feat_dataset2(test_split, test_names)
 
 
 def build_HDF5_feat_dataset_2(file_path_level1, file_path_level3, conf):
 
-    if conf.dataset == 'camelyon' :
+    if conf.dataset == 'camelyon16' :
         train_split1, train_split3, train_names, val_split1, val_split3, val_names, test_split1, test_split3, test_names = split_dataset_fglobal_camelyon(file_path_level1, file_path_level3, conf)
         return HDF5_feat_dataset4(train_split1, train_split3, train_names), HDF5_feat_dataset4(val_split1, val_split3, val_names), HDF5_feat_dataset4(test_split1, test_split3, test_names)
 
     elif conf.dataset == 'tcga' :
-        train_split1, train_split3, train_names, val_split1, val_split3, val_names, test_split1, test_split3, test_names = split_dataset_fglobal_tcga(
-            file_path_level1, file_path_level3, conf)
-        return HDF5_feat_dataset4(train_split1, train_split3, train_names), HDF5_feat_dataset4(val_split1, val_split3,
-                                                                                               val_names), HDF5_feat_dataset4(
-            test_split1, test_split3, test_names)
+        train_split1, train_split3, train_names, val_split1, val_split3, val_names, test_split1, test_split3, test_names = split_dataset_fglobal_tcga(file_path_level1, file_path_level3, conf)
+        return HDF5_feat_dataset4(train_split1, train_split3, train_names), HDF5_feat_dataset4(val_split1, val_split3,val_names), HDF5_feat_dataset4(test_split1, test_split3, test_names)
+
 
 
 def split_dataset_fglobal_camelyon(file_path_level1, file_path_level3, conf):

@@ -48,6 +48,8 @@ class Whole_Slide_Bag(Dataset):
 
 
 class Whole_Slide_Bag_FP(Dataset):
+
+
     def __init__(self,
                  file_path,
                  wsi,
@@ -205,6 +207,51 @@ class Whole_Slide_Bag_FP(Dataset):
             end_time = time.time()
             return {'img': img, 'coord': coord, 'time': end_time - start_time}
 
+    def get_high_res_img(self, coord):
+
+        if self.dataset_name == 'camelyon16':
+
+            # Second Logic
+            high_resolution_imgs = []
+            high_resolution_coords = []
+            high_resolution_time = []
+
+            x_start = coord[0]
+            y_start = coord[1]
+
+            scale_factor = 2 ** (self.patch_level_low_res - self.patch_level_high_res)
+            step_size = 256
+            cnt = 0
+
+            start_time_hr = time.time()
+
+            # Step 1 - At High Resolution
+            for x_step_idx in range(scale_factor):
+                for y_step_idx in range(scale_factor):
+                    x_curr = x_start + x_step_idx * 2 * step_size
+                    y_curr = y_start + y_step_idx * 2 * step_size
+                    patch = self.wsi.read_region((x_curr, y_curr), self.patch_level_high_res,
+                                                 (self.patch_size, self.patch_size)).convert("RGB")
+                    # patch.save(f"/media/internal_8T/naman/rlogist/sample/idx_{idx}_hr_{cnt}.jpg")
+                    cnt += 1
+                    patch = self.roi_transforms(patch)
+                    high_resolution_imgs.append(patch)
+                    high_resolution_coords.append(np.array([x_curr, y_curr]))
+
+            # Combining all logic to get the output
+            high_resolution_imgs = torch.stack(high_resolution_imgs)
+            high_resolution_coords = np.stack(high_resolution_coords)
+            end_time_hr = time.time()
+
+            return {
+                'hr_img': high_resolution_imgs,  # Op : K, 3, 224, 224
+                'hr_coords': high_resolution_coords,  # Op : K, 2
+                'hr_time': end_time_hr - start_time_hr,  # Op : 1
+            }
+
+        elif self.dataset_name == 'tcga':
+
+            print("TCGA")
 
 class Dataset_All_Bags(Dataset):
 

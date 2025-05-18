@@ -524,3 +524,36 @@ class HACMIL_GA(nn.Module):
 
         bag_feat = torch.mm(bag_A, feat)
         return self.Slide_classifier(bag_feat), A_2
+
+
+    def get_hr_fa(self, x):
+
+        feat = x
+        x = self.dimreduction(feat) if self.use_dim_reduction else feat
+        A_1 = self.attention_1(x).transpose(0, 2).transpose(0, 1)  ## n_token x N x 16
+
+        if self.n_masked_patch_1 > 0 and self.training:
+            # Get the indices of the top-k largest values
+            N, n_token_1, k = A_1.shape  # N x num_models x 16 , weigths across 16
+            n_masked_patch = min(self.n_masked_patch_1, k)
+            _, indices = torch.topk(A_1, n_masked_patch, dim=-1)
+            rand_selected = torch.argsort(torch.rand(*indices.shape), dim=-1)[:, :,
+                            :int(n_masked_patch * self.mask_drop)]
+            masked_indices = indices[
+                torch.arange(indices.shape[0]).unsqueeze(-1).unsqueeze(-1).expand(-1, indices.shape[1],
+                                                                                  rand_selected.shape[
+                                                                                      2]),  # Shape: [747, 2, 2]
+                torch.arange(indices.shape[1]).unsqueeze(0).unsqueeze(-1).expand(indices.shape[0], -1,
+                                                                                 rand_selected.shape[
+                                                                                     2]),  # Shape: [747, 2, 2]
+                rand_selected  # Shape: [747, 2, 2]
+            ]
+            random_mask = torch.ones(N, n_token_1, k).to(A_1.device)
+            random_mask.scatter_(-1, masked_indices, 0)
+            A_1 = A_1.masked_fill(random_mask == 0, -1e9)
+
+        A_1 = F.softmax(A_1, dim=-1)  # softmax over 16
+        bag_A1 = A_1.mean(dim=1, keepdim=True)
+        afeat_1 = torch.bmm(bag_A1, feat).squeeze(1)  ## K x L
+
+        return afeat_1
