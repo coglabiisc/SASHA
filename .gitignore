@@ -3,9 +3,4 @@ commands.txt
 config
 outputs
 *.pyc
-Step_4z_visualize_heatmap_camelyon.py
-step_5z_wsi_visulaization.py
-step_5z_wsi_visulaization_step2.py
-step_5z_wsi_visulaization_step2_dgx.py
-step_6z_wsi_gif.py
-step_zz_rl_training_mask_patch_d_id.py
+extras
