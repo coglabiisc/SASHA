@@ -72,25 +72,9 @@ class IBMIL(nn.Module):
         A = self.attention(x)  ## K x N
         A = F.softmax(A, dim=1)  # softmax over N
         M = torch.mm(A, x) ## K x L
-        # x = x.squeeze(0)
 
-        # H = self.feature_extractor_part1(x)
-        # H = H.view(-1, 50 * 4 * 4)
-        # H = self.feature_extractor_part2(H)  # NxL
-
-        # A = self.attention_1(x)
-        # A = self.attention_2(A)  # NxK
-        # A = self.attention(x)  # NxK
-        # A = torch.transpose(A, 1, 0)  # KxN
-        # A = F.softmax(A, dim=1)  # softmax over N
-        # print('norm')
-        # A = F.softmax(A/ torch.sqrt(torch.tensor(x.shape[1])), dim=1)  # For Vis
-
-        # M = torch.mm(A, x)  # KxL
         if self.confounder_path:
             device = M.device
-            # bag_q = self.confounder_W_q(M)
-            # conf_k = self.confounder_W_k(self.confounder_feat)
             bag_q = self.W_q(M)
             conf_k = self.W_k(self.confounder_feat)
             deconf_A = torch.mm(conf_k, bag_q.transpose(0, 1))
@@ -111,20 +95,3 @@ class IBMIL(nn.Module):
             return Y_prob, M, deconf_A
         else:
             return Y_prob, M, A
-
-    # # AUXILIARY METHODS
-    # def calculate_classification_error(self, X, Y):
-    #     Y = Y.float()
-    #     _, Y_hat, _ = self.forward(X)
-    #     error = 1. - Y_hat.eq(Y).cpu().float().mean().data.item()
-    #
-    #     return error, Y_hat
-    #
-    # def calculate_objective(self, X, Y):
-    #     Y = Y.float()
-    #     Y_prob, _, A = self.forward(X)
-    #     Y_prob = torch.clamp(Y_prob, min=1e-5, max=1. - 1e-5)
-    #     neg_log_likelihood = -1. * (Y * torch.log(Y_prob) + (1. - Y) * torch.log(1. - Y_prob))  # negative log bernoulli
-    #
-    #     return neg_log_likelihood, A
-

@@ -1,51 +1,11 @@
 import math
-import os
 
-import torch
-from torch import nn, Tensor
 import torch.nn.functional as F
-from architecture.network import Classifier_1fc, DimReduction, DimReduction1
-from einops import repeat
-from .nystrom_attention import NystromAttention
+from torch import Tensor
+
+from architecture.network import Classifier_1fc, DimReduction
 from modules.emb_position import *
 
-def pos_enc_1d(D, len_seq):
-    
-    if D % 2 != 0:
-        raise ValueError("Cannot use sin/cos positional encoding with "
-                         "odd dim (got dim={:d})".format(D))
-    pe = torch.zeros(len_seq, D)
-    position = torch.arange(0, len_seq).unsqueeze(1)
-    div_term = torch.exp((torch.arange(0, D, 2, dtype=torch.float) *
-                         -(math.log(10000.0) / D)))
-    pe[:, 0::2] = torch.sin(position.float() * div_term)
-    pe[:, 1::2] = torch.cos(position.float() * div_term)
-
-    return pe
-
-
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, dropout_rate):
-        super(MLP, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.dropout = nn.Dropout(dropout_rate)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = torch.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return x
-
-class MLP_single_layer(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super(MLP_single_layer, self).__init__()
-        self.fc = nn.Linear(input_dim, output_dim)
-
-    def forward(self, x):
-        x = self.fc(x)
-        return x
 
 class ACMIL_MHA(nn.Module):
     def __init__(self, conf, n_token=1, n_masked_patch=0, mask_drop=0):
@@ -353,9 +313,10 @@ class ACMIL_GA(nn.Module):
 
 
 
-class HACMIL_GA(nn.Module):
+class HAFED(nn.Module):
+
     def __init__(self, conf, D=128, droprate=0, n_token_1=1, n_token_2=1, n_masked_patch_1=0 ,n_masked_patch_2=0, mask_drop=0):
-        super(HACMIL_GA, self).__init__()
+        super(HAFED, self).__init__()
         self.dimreduction = DimReduction(conf.D_feat, conf.D_inner)
         self.dimreduction_2 = DimReduction(conf.D_feat, conf.D_inner)
         self.classifier = nn.ModuleList()
@@ -425,56 +386,6 @@ class HACMIL_GA(nn.Module):
         return torch.stack(outputs, dim=0), self.Slide_classifier(bag_feat), A_1, A_2, afeat_1, attn_raw
 
 
-    # def forward(self, x, extract_feature=False): ## x: N x 16 x 1024
-    #     feat = x[0]
-    #     x = self.dimreduction(feat) if self.use_dim_reduction else feat
-    #     A_1 = self.attention_1(x).transpose(0,2).transpose(0,1)  ## n_token x N x 16
-
-
-    #     if self.n_masked_patch_1 > 0 and self.training:
-    #         # Get the indices of the top-k largest values
-    #         N, n_token_1, k = A_1.shape #N x num_models x 16 , weigths across 16
-    #         n_masked_patch = min(self.n_masked_patch_1, k)
-    #         _, indices = torch.topk(A_1, n_masked_patch, dim=-1)
-    #         rand_selected = torch.argsort(torch.rand(*indices.shape), dim=-1)[:, :, :int(n_masked_patch * self.mask_drop)]
-    #         masked_indices = indices[
-    #             torch.arange(indices.shape[0]).unsqueeze(-1).unsqueeze(-1).expand(-1, indices.shape[1], rand_selected.shape[2]),  # Shape: [747, 2, 2]
-    #             torch.arange(indices.shape[1]).unsqueeze(0).unsqueeze(-1).expand(indices.shape[0], -1, rand_selected.shape[2]),  # Shape: [747, 2, 2]
-    #             rand_selected  # Shape: [747, 2, 2]
-    #         ]
-    #         random_mask = torch.ones(N, n_token_1, k).to(A_1.device)
-    #         random_mask.scatter_(-1, masked_indices, 0)
-    #         A_1 = A_1.masked_fill(random_mask == 0, -1e9)
-
-    #     A_1 = F.softmax(A_1, dim=-1)  # softmax over 16
-    #     bag_A1 = A_1.mean(dim=1, keepdim=True)
-    #     afeat_1 = torch.bmm(bag_A1, feat).squeeze(1) ## K x L
-    #     y = self.dimreduction_2(afeat_1) if self.use_dim_reduction else afeat_1
-    #     A_2 = self.attention_2(y)
-    #     A_2NS = A_2[:5, :]
-    #     A_2S_raw = A_2[5:, :]
-    #     if self.n_masked_patch_2 > 0 and self.training:
-    #         k,n = A_2NS.shape
-    #         n_masked_patch = min(self.n_masked_patch_2, n)
-    #         _, indices = torch.topk(A_2NS, n_masked_patch, dim=-1)
-    #         rand_selected = torch.argsort(torch.rand(*indices.shape), dim=-1)[:, :int(n_masked_patch * self.mask_drop)]
-    #         masked_indices = indices[torch.arange(indices.shape[0]).unsqueeze(-1), rand_selected]
-    #         random_mask = torch.ones(k, n).to(A_2NS.device)
-    #         random_mask.scatter_(-1, masked_indices, 0)
-    #         A_2NS = A_2NS.masked_fill(random_mask == 0, -1e9)
-    #     A_2NS = self.alpha * A_2NS
-    #     A_2S = (1 - self.alpha) * A_2S_raw
-    #     A_2_raw = torch.cat((A_2NS, A_2S), dim=0)
-    #     A_2 = F.softmax(A_2, dim=1)
-    #     afeat_2 = torch.mm(A_2, afeat_1)
-    #     outputs = []
-    #     for i, head in enumerate(self.classifier):
-    #         outputs.append(head(afeat_2[i]))
-    #     bag_A = A_2.mean(0, keepdim=True)
-    #     bag_feat = torch.mm(bag_A, afeat_1)
-    #     return torch.stack(outputs, dim=0), self.Slide_classifier(bag_feat), A_1, A_2, afeat_1, A_2_raw
-    
-
 
     def forward_feature(self, x, use_attention_mask=False): ## x: N x L
         x = x[0]
@@ -512,11 +423,8 @@ class HACMIL_GA(nn.Module):
             random_mask = torch.ones(k, n).to(A_2.device)
             random_mask.scatter_(-1, masked_indices, 0)
             A_2 = A_2.masked_fill(random_mask == 0, -1e9)
+
         A_2 = F.softmax(A_2, dim=1)
-        # afeat_2 = torch.mm(A_2, feat)
-        # outputs = []
-        # for i, head in enumerate(self.classifier):
-        #     outputs.append(head(afeat_2[i]))
         bag_A = A_2.mean(0, keepdim=True)
 
         if average_block2_weights:

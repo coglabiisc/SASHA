@@ -1,13 +1,5 @@
-import math
-import os
-
 import torch
-from torch import nn, Tensor
-import torch.nn.functional as F
-from sasha.architecture.network import Classifier_1fc, DimReduction, DimReduction1
-from einops import repeat
-from .nystrom_attention import NystromAttention
-from sasha.modules.emb_position import *
+from torch import nn
 
 
 class f_global(nn.Module):

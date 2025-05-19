@@ -1,7 +1,4 @@
 import torch
-import random
-
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
@@ -117,26 +114,6 @@ class Agent(nn.Module):
     def get_value(self, x):
         value = self.critic(x)
         return value
-    
-
-    # def get_action(self, x, visited_patch_ids):
-    #     A_raw = self.actor(x).view(1, -1)
-    #     A_raw[0][visited_patch_ids] = -torch.inf
-    #     dist = Categorical(logits=A_raw)
-    #     action = dist.sample()
-    #     log_prob = dist.log_prob(action)
-    #
-    #     return action, log_prob.detach(), dist.entropy()
-
-    # def get_action(self, x, visited_patch_ids, is_eval=False, is_top_k= None, is_top_p = None):
-    #     A_raw = self.actor(x).view(1, -1)
-    #     A_raw[0][visited_patch_ids] = -torch.inf
-    #     dist = Categorical(logits=A_raw)
-    #     action = torch.argmax(dist.probs) if is_eval else dist.sample()
-    #     log_prob = dist.log_prob(action)  # TODO : Changing this line
-    #
-    #
-    #     return action, torch.max(dist.probs).detach().cpu(), dist.entropy()  # TODO : Need to replace the sec value with log_prob
 
     def get_action(self, x, visited_patch_ids, is_eval=False, is_top_k = False, is_top_p = False):
         A_raw = self.actor(x).view(1, -1)
@@ -226,45 +203,12 @@ class Agent(nn.Module):
             log_probs - the log probabilities of the actions taken in batch_acts given batch_obs
 		
         """
+
 		# Query critic network for a value V for each batch_obs. Shape of V should be same as batch_rtgs
-		
         V = self.critic(batch_obs).squeeze()
-
-		# Calculate the log probabilities of batch actions using most recent actor network.
-		# This segment of code is similar to that in get_action()
-
-		# Naman this is experiment part by Naman [ Can be ignored ]
-        # A_raw = self.actor(batch_obs)
-        # A_raw = A_raw.squeeze(1)
-        #
-        # all_true_rows = torch.all(batch_visited_patch_ids, dim=1)
-        # mask = ~all_true_rows.unsqueeze(1).expand_as(batch_visited_patch_ids)
-        # A_raw[batch_visited_patch_ids & mask] = -torch.inf
-        #
-        # dist = Categorical(logits=A_raw)
-        # log_prob = dist.log_prob(batch_acts)
-
         A_raw = self.actor(batch_obs)
         dist = Categorical(logits=A_raw.squeeze(1))
         log_prob = dist.log_prob(batch_acts)
-
-
-
-    # Return the value vector V of each observation in the batch
-		# and log probabilities log_probs of each action in the batch
 		
         return V, log_prob, dist.entropy()
 
-# def make_env(slide_name, conf):
-#     def thunk() :
-
-#         # if conf.f_global_cosine_enable : # This logic is working when updating only those states where the cosine threshold is considered
-#         #     env = WSIObservationEnvCosine(WSI_name= slide_name, args= conf, scanning_level=conf.scan_res_level, deep_level=conf.high_res_level)
-#         # else : # This is the old logic where the traditionally updating whole state by seeing just 1 patch
-#         env = WSIObservationEnv(lr_features=conf.scan_res_level, deep_level=conf.high_res_level)
-#         env = gym.wrappers.RecordEpisodeStatistics(env)
-#         env.action_space.seed(conf.seed)
-#         env.observation_space.seed(conf.seed)
-#         return env
-
-#     return thunk

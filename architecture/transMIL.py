@@ -1,7 +1,7 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
+
 from nystrom_attention import NystromAttention
 
 
@@ -15,10 +15,8 @@ class TransLayer(nn.Module):
             dim_head=dim // 8,
             heads=8,
             num_landmarks=dim // 2,  # number of landmarks
-            pinv_iterations=6,
-            # number of moore-penrose iterations for approximating pinverse. 6 was recommended by the paper
-            residual=True,
-            # whether to do an extra residual with the value or not. supposedly faster convergence if turned on
+            pinv_iterations=6,       # number of moore-penrose iterations for approximating pinverse. 6 was recommended by the paper
+            residual=True,           # whether to do an extra residual with the value or not. supposedly faster convergence if turned on
             dropout=0.1
         )
 
@@ -85,9 +83,6 @@ class TransMIL(nn.Module):
 
         # ---->predict
         logits = self._fc2(h)  # [B, n_classes]
-        # Y_hat = torch.argmax(logits, dim=1)
-        # Y_prob = F.softmax(logits, dim=1)
-        # results_dict = {'logits': logits, 'Y_prob': Y_prob, 'Y_hat': Y_hat}
         return logits
 
 

@@ -32,6 +32,10 @@ class MeanMIL(nn.Module):
         self.apply(initialize_weights)
 
     def forward(self,x):
+        x = x[0]
+        if x.ndimension() == 3 :
+            x = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
+        x = x.unsqueeze(0)
 
         x = self.head(x).mean(axis=1)
         return x
@@ -56,5 +60,10 @@ class MaxMIL(nn.Module):
         self.apply(initialize_weights)
 
     def forward(self,x):
+        x = x[0]
+        if x.ndimension() == 3:
+            x = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
+        x = x.unsqueeze(0)
+
         x,_ = self.head(x).max(axis=1)
         return x

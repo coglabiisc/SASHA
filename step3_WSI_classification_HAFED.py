@@ -40,7 +40,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from architecture.transformer import ACMIL_GA
-from architecture.transformer import HACMIL_GA
+from architecture.transformer import HAFED
 from datasets.datasets import build_HDF5_feat_dataset
 from utils.gpu_utils import check_gpu_availability
 from utils.utils import MetricLogger, SmoothedValue, adjust_learning_rate
@@ -143,12 +143,12 @@ def main():
                          mask_drop=conf.mask_drop)
 
     elif conf.arch == 'hga':
-        model = HACMIL_GA(conf,
-                          n_token_1=conf.n_token_1,
-                          n_token_2=conf.n_token_2,
-                          n_masked_patch_1=conf.n_masked_patch_1,
-                          n_masked_patch_2=conf.n_masked_patch_2,
-                          mask_drop=conf.mask_drop)
+        model = HAFED(conf,
+                      n_token_1=conf.n_token_1,
+                      n_token_2=conf.n_token_2,
+                      n_masked_patch_1=conf.n_masked_patch_1,
+                      n_masked_patch_2=conf.n_masked_patch_2,
+                      mask_drop=conf.mask_drop)
     else :
         raise Exception(f"Enter a valid model architecture name e.g. ga, hga")
 

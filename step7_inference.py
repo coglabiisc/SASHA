@@ -28,10 +28,10 @@ from sklearn.metrics import balanced_accuracy_score
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from WSI_cosine_env import WSICosineObservationEnv
-from WSI_env import WSIObservationEnv
+from envs.WSI_cosine_env import WSICosineObservationEnv
+from envs.WSI_env import WSIObservationEnv
 from architecture.transformer import ACMIL_GA
-from architecture.transformer import HACMIL_GA
+from architecture.transformer import HAFED
 from datasets.datasets import build_HDF5_feat_dataset_2
 from modules.fglobal_mlp import FGlobal
 from rl_algorithms.ppo import Agent, Actor, Critic
@@ -121,9 +121,9 @@ def main():
         classifier = ACMIL_GA(classifier_conf, n_token=classifier_conf.n_token,
                               n_masked_patch=classifier_conf.n_masked_patch, mask_drop=classifier_conf.mask_drop)
     elif classifier_conf.arch == 'hga':
-        classifier = HACMIL_GA(classifier_conf, n_token_1=classifier_conf.n_token_1,
-                               n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1,
-                               n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)
+        classifier = HAFED(classifier_conf, n_token_1=classifier_conf.n_token_1,
+                           n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1,
+                           n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)
     else :
         raise Exception("Select a valid classifier architecture.")
 

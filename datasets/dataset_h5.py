@@ -120,7 +120,6 @@ class Whole_Slide_Bag_FP(Dataset):
                         y_curr = y_start + y_step_idx  * 2  *  step_size
                         patch = self.wsi.read_region((x_curr, y_curr), self.patch_level_high_res,
                                                      (self.patch_size, self.patch_size)).convert("RGB")
-                        # patch.save(f"/media/internal_8T/naman/SASHA/outputs/fe_images_sample/idx_{idx}_hr_{cnt}.jpg")
                         cnt += 1
                         patch = self.roi_transforms(patch)
                         high_resolution_imgs.append(patch)
@@ -135,7 +134,6 @@ class Whole_Slide_Bag_FP(Dataset):
                 start_time_lr = time.time()
                 patch = self.wsi.read_region((x_start, y_start), self.patch_level_low_res,
                                              (self.patch_size, self.patch_size)).convert("RGB")
-                # patch.save(f"/media/internal_8T/naman/SASHA/outputs/fe_images_sample/idx_{idx}_lr_{0}.jpg")
                 low_resolution_imgs = self.roi_transforms(patch)
                 low_resolution_coords = coord
                 end_time_lr = time.time()
@@ -170,7 +168,6 @@ class Whole_Slide_Bag_FP(Dataset):
                         y_curr = y_start + y_step_idx * 4 * step_size
                         patch = self.wsi.read_region((x_curr, y_curr), self.patch_level_high_res,
                                                      (self.patch_size, self.patch_size)).convert("RGB")
-                        # patch.save(f"/media/internal_8T/naman/SASHA/outputs/fe_images_sample/idx_{idx}_hr_{cnt}.jpg")
                         cnt += 1
                         patch = self.roi_transforms(patch)
                         high_resolution_imgs.append(patch)
@@ -185,7 +182,6 @@ class Whole_Slide_Bag_FP(Dataset):
                 start_time_lr = time.time()
                 patch = self.wsi.read_region((x_start, y_start), self.patch_level_low_res,
                                              (self.patch_size, self.patch_size)).convert("RGB")
-                # patch.save(f"/media/internal_8T/naman/SASHA/outputs/fe_images_sample/idx_{idx}_lr_{0}.jpg")
                 low_resolution_imgs = self.roi_transforms(patch)
                 low_resolution_coords = coord
                 end_time_lr = time.time()
@@ -232,7 +228,6 @@ class Whole_Slide_Bag_FP(Dataset):
                     y_curr = y_start + y_step_idx * 2 * step_size
                     patch = self.wsi.read_region((x_curr, y_curr), self.patch_level_high_res,
                                                  (self.patch_size, self.patch_size)).convert("RGB")
-                    # patch.save(f"/media/internal_8T/naman/rlogist/sample/idx_{idx}_hr_{cnt}.jpg")
                     cnt += 1
                     patch = self.roi_transforms(patch)
                     high_resolution_imgs.append(patch)

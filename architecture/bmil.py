@@ -1,15 +1,12 @@
 import math
 import numbers
-import time
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
-from utils.utils import initialize_weights
+
 from architecture.linear_vdo import LinearVDO, Conv2dVDO
-import numpy as np
-from torch.distributions import kl
+from utils.utils import initialize_weights
 
 EPS_1 = 1e-16
 # EPS_2 = 1e-28

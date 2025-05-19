@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from clam.utils.utils import initialize_weights
-import numpy as np
+
+from models_features_extraction.model_habmil import initialize_weights
+
 
 class MIL_fc(nn.Module):
     def __init__(self, gate = True, size_arg = "small", dropout = False, n_classes = 2, top_k=1):

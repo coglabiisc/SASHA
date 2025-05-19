@@ -1,65 +1,50 @@
 
-# !/usr/bin/env python
-import sys
+import argparse
 import os
-os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-import yaml
 from pprint import pprint
 
-import argparse
 import torch
+import torchmetrics
+import wandb
+import yaml
+from timm.utils import accuracy
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
-from utils.utils import save_model, Struct, set_seed, Wandb_Writer
-from datasets.datasets import build_HDF5_feat_dataset
 from architecture.Attention import Attention_Gated as Attention
 from architecture.Attention import Attention_with_Classifier
-from architecture.network import    Classifier_1fc, DimReduction
+from architecture.network import Classifier_1fc, DimReduction
+from datasets.datasets import build_HDF5_feat_dataset
 from utils.utils import MetricLogger, SmoothedValue, adjust_learning_rate
+from utils.utils import Struct, set_seed
 from utils.utils import get_cam_1d
-import torchmetrics
-from timm.utils import accuracy
-import time
-import wandb
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_arguments():
     parser = argparse.ArgumentParser('Patch classification training', add_help=False)
-    parser.add_argument('--config', dest='config', default='config/camelyon_config.yml',
-                        help='settings of Tip-Adapter in yaml format')
-    parser.add_argument(
-        "--eval-only", action="store_true", help="evaluation only"
-    )
-    parser.add_argument(
-        "--seed", type=int, default=2, help="set the random seed to ensure reproducibility"
-    )
-    parser.add_argument('--wandb_mode', default='disabled', choices=['offline', 'online', 'disabled'],
-                        help='the model of wandb')
-    parser.add_argument(
-        "--n_shot", type=int, default=-1, help="number of wsi images"
-    )
-    parser.add_argument(
-        "--w_loss", type=float, default=1.0, help="number of query token"
-    )
+    parser.add_argument('--config', dest='config', default='config/camelyon_config.yml', help='settings of Tip-Adapter in yaml format')
+    parser.add_argument("--eval-only", action="store_true", help="evaluation only")
+    parser.add_argument("--seed", type=int, default=4, help="set the random seed to ensure reproducibility")
+    parser.add_argument('--logs_mode', default='disabled', choices=['offline', 'online', 'disabled'], help='the model of wandb')
+    parser.add_argument("--n_shot", type=int, default=-1, help="number of wsi images")
+    parser.add_argument("--w_loss", type=float, default=1.0, help="number of query token")
     parser.add_argument('--numGroup', default=4, type=int)
     parser.add_argument('--total_instance', default=4, type=int)
     parser.add_argument('--numGroup_test', default=4, type=int)
     parser.add_argument('--total_instance_test', default=4, type=int)
     parser.add_argument('--grad_clipping', default=5, type=float)
+    parser.add_argument('--pretrain', default='medical_ssl', choices=['natural_supervised', 'medical_ssl', 'path-clip-L-336'], help='settings of Tip-Adapter in yaml format')
+    parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
 
-    parser.add_argument('--pretrain', default='medical_ssl',
-                        choices=['natural_supervised', 'medical_ssl', 'path-clip-L-336'],
-                        help='settings of Tip-Adapter in yaml format')
-    parser.add_argument(
-        "--lr", type=float, default=0.0001, help="learning rate"
-    )
+    parser.add_argument("--exp_name", type=str, default="DEBUG", help="Experiment name")
+    parser.add_argument("--log_dir", type=str, default=' /mnt/hdd/naman/naman/results_2025/results/camleyon16/extra', help="Path to logs folder")
+
     args = parser.parse_args()
     return args
 
-def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion, data_loader, optimizer0,
-                    optimizer1, device, epoch, conf, distill='MaxMinS'):
+def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion, data_loader, optimizer0, optimizer1, device, epoch, conf, distill='MaxMinS'):
+
     """
     Trains the given network for one epoch according to given criterions (loss functions)
     """
@@ -75,14 +60,16 @@ def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion,
     print_freq = 100
 
     for data_it, data in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        # # Calculate and set new learning rate
+
+        # Calculate and set new learning rate
         adjust_learning_rate(optimizer0, epoch + data_it/len(data_loader), conf)
         adjust_learning_rate(optimizer1, epoch + data_it/len(data_loader), conf)
 
 
-        # for data_it, data in enumerate(data_loader, start=epoch * len(data_loader)):
+        # For data_it, data in enumerate(data_loader, start=epoch * len(data_loader)):
         # Move input batch onto GPU if eager execution is enabled (default), else leave it on CPU
         # Data is a dict with keys `input` (patches) and `{task_name}` (labels for given task)
+
         tfeat_tensor = data['input'].to(device, dtype=torch.float32)
         tfeat_tensor = tfeat_tensor[0]
         tslideLabel = data['label'].to(device)
@@ -90,7 +77,6 @@ def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion,
         instance_per_group = conf.total_instance // conf.numGroup
         feat_index = torch.randperm(tfeat_tensor.shape[0]).to(device)
         index_chunk_list = torch.tensor_split(feat_index, conf.numGroup)
-
 
         slide_pseudo_feat = []
         slide_sub_preds = []
@@ -189,7 +175,6 @@ def evaluate(classifier, attention, dimReduction, UClassifier, criterion, data_l
 
         slide_d_feat = []
 
-
         for tindex in index_chunk_list:
             tmidFeat = midFeat.index_select(dim=0, index=tindex)
 
@@ -223,13 +208,10 @@ def evaluate(classifier, attention, dimReduction, UClassifier, criterion, data_l
         gSlidePred = UClassifier(slide_d_feat)
         allSlide_pred_softmax = torch.softmax(gSlidePred, dim=1)
 
-
-
         loss = criterion(allSlide_pred_softmax, tslideLabel)
         acc1 = accuracy(allSlide_pred_softmax, tslideLabel, topk=(1,))[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=1)
-
 
         y_pred.append(allSlide_pred_softmax)
         y_true.append(tslideLabel)
@@ -244,13 +226,13 @@ def evaluate(classifier, attention, dimReduction, UClassifier, criterion, data_l
     F1_metric(y_pred, y_true)
     f1_score = F1_metric.compute().item()
 
-    print('* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f} auroc {AUROC:.3f} f1_score {F1:.3f}'
-          .format(top1=metric_logger.acc1, losses=metric_logger.loss, AUROC=auroc, F1=f1_score))
+    print('* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f} auroc {AUROC:.3f} f1_score {F1:.3f}' .format(top1=metric_logger.acc1, losses=metric_logger.loss, AUROC=auroc, F1=f1_score))
 
     return auroc, metric_logger.acc1.global_avg, f1_score, metric_logger.loss.global_avg
 
 
 def main():
+
     # Load config file
     args = get_arguments()
 
@@ -260,32 +242,12 @@ def main():
         c.update(vars(args))
         conf = Struct(**c)
 
-    if conf.pretrain == 'medical_ssl':
-        conf.D_feat = 384
-        conf.D_inner = 128
-    elif conf.pretrain == 'natural_supervsied':
-        conf.D_feat = 512
-        conf.D_inner = 256
-    elif conf.pretrain == 'path-clip-L-336':
-        conf.D_feat = 768
-        conf.D_inner = 384
+    # Initialized the config directory
+    conf.writer = SummaryWriter(log_dir=os.path.join(conf.log_dir, "logs"))
 
-
-    # start a new wandb run to track this script
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project="ADR",
-        # track hyperparameters and run metadata
-        config={'dataset': conf.dataset,
-                'pretrain': conf.pretrain,
-                'loss_form': 'DTFD-MIL',
-                'seed': conf.seed,},
-        mode=conf.wandb_mode
-    )
-    run_dir = wandb.run.dir  # Get the wandb run directory
-    print('Wandb run dir: %s'%run_dir)
-    ckpt_dir = os.path.join(os.path.dirname(os.path.normpath(run_dir)), 'saved_models')
-    os.makedirs(ckpt_dir, exist_ok=True)  # Create the 'ckpt' directory if it doesn't exist
+    # Initializing model directory to save weights
+    ckpt_dir = os.path.join(conf.log_dir, "models", conf.exp_name)
+    os.makedirs(ckpt_dir, exist_ok=True)
 
     print("Used config:");
     pprint(vars(conf));
@@ -296,51 +258,44 @@ def main():
     # define datasets and dataloaders
     train_data, val_data, test_data = build_HDF5_feat_dataset(os.path.join(conf.data_dir, 'patch_feats_pretrain_%s.h5'%conf.pretrain), conf)
 
-    train_loader = DataLoader(train_data, batch_size=conf.B, shuffle=True,
-                              num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=True)
-    val_loader = DataLoader(val_data, batch_size=conf.B, shuffle=False,
-                             num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)
-    test_loader = DataLoader(test_data, batch_size=conf.B, shuffle=False,
-                             num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)
+    train_loader = DataLoader(train_data, batch_size=conf.B, shuffle=True,num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=True)
+    val_loader = DataLoader(val_data, batch_size=conf.B, shuffle=False,num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)
+    test_loader = DataLoader(test_data, batch_size=conf.B, shuffle=False, num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)
 
     # define network
-    classifier = Classifier_1fc(conf.D_inner, conf.n_class, 0).to(device)
-    attention = Attention(conf.D_inner).to(device)
-    dimReduction = DimReduction(conf.D_feat, conf.D_inner).to(device)
-    attCls = Attention_with_Classifier(L=conf.D_inner, num_cls=conf.n_class, droprate=0).to(device)
+    classifier = Classifier_1fc(conf.D_inner, conf.n_class, 0).to(conf.device)
+    attention = Attention(conf.D_inner).to(conf.device)
+    dimReduction = DimReduction(conf.D_feat, conf.D_inner).to(conf.device)
+    attCls = Attention_with_Classifier(L=conf.D_inner, num_cls=conf.n_class, droprate=0).to(conf.device)
 
-    criterion = nn.CrossEntropyLoss()
 
     trainable_parameters = []
     trainable_parameters += list(classifier.parameters())
     trainable_parameters += list(attention.parameters())
     trainable_parameters += list(dimReduction.parameters())
 
+    criterion = nn.CrossEntropyLoss()
     optimizer_adam0 = torch.optim.Adam(trainable_parameters, lr=conf.lr,  weight_decay=conf.wd)
     optimizer_adam1 = torch.optim.Adam(attCls.parameters(), lr=conf.lr,  weight_decay=conf.wd)
 
-    # Record the start time
-    start_time = time.time()
-
     best_state = {'epoch':-1, 'val_acc':0, 'val_auc':0, 'val_f1':0, 'test_acc':0, 'test_auc':0, 'test_f1':0}
+
     for epoch in range(conf.train_epoch):
 
-        train_one_epoch(classifier, attention, dimReduction, attCls,
-                         criterion, train_loader, optimizer_adam0, optimizer_adam1, device, epoch, conf)
-
-
-        val_auc, val_acc, val_f1, val_loss = evaluate(classifier, attention, dimReduction, attCls, criterion, val_loader, device, conf, 'Val')
-        test_auc, test_acc, test_f1, test_loss = evaluate(classifier, attention, dimReduction, attCls, criterion, test_loader, device, conf, 'Test')
+        train_one_epoch(classifier, attention, dimReduction, attCls, criterion, train_loader, optimizer_adam0, optimizer_adam1, conf.device, epoch, conf)
+        val_auc, val_acc, val_f1, val_loss = evaluate(classifier, attention, dimReduction, attCls, criterion, val_loader, conf.device, conf, 'Val')
+        test_auc, test_acc, test_f1, test_loss = evaluate(classifier, attention, dimReduction, attCls, criterion, test_loader, conf.device, conf, 'Test')
 
         if conf.wandb_mode != 'disabled':
-            wandb.log({'test/test_acc1': test_acc}, commit=False)
-            wandb.log({'test/test_auc': test_auc}, commit=False)
-            wandb.log({'test/test_f1': test_f1}, commit=False)
-            wandb.log({'test/test_loss': test_loss}, commit=False)
-            wandb.log({'val/val_acc1': val_acc}, commit=False)
-            wandb.log({'val/val_auc': val_auc}, commit=False)
-            wandb.log({'val/val_f1': val_f1}, commit=False)
-            wandb.log({'val/val_loss': val_loss}, commit=False)
+
+            conf.writer.add_scalar('test/test_acc1', test_acc, epoch)
+            conf.writer.add_scalar('test/test_auc', test_auc, epoch)
+            conf.writer.add_scalar('test/test_f1', test_f1, epoch)
+            conf.writer.add_scalar('test/test_loss', test_loss, epoch)
+            conf.writer.add_scalar('val/val_acc1', val_acc, epoch)
+            conf.writer.add_scalar('val/val_auc', val_auc, epoch)
+            conf.writer.add_scalar('val/val_f1', val_f1, epoch)
+            conf.writer.add_scalar('val/val_loss', val_loss, epoch)
 
         if val_f1 + val_auc > best_state['val_f1'] + best_state['val_auc']:
             best_state['epoch'] = epoch
@@ -350,24 +305,11 @@ def main():
             best_state['test_auc'] = test_auc
             best_state['test_acc'] = test_acc
             best_state['test_f1'] = test_f1
-            # log_writer.summary('best_acc', val_acc)
-            # save_model(
-            #     conf=conf, model=net, optimizer=optimizer, epoch=epoch, is_best=True)
+
         print('\n')
 
-    # save_model(
-    #     conf=conf, model=net, optimizer=optimizer, epoch=epoch, is_last=True)
     print("Results on best epoch:")
     print(best_state)
-
-
-    # Calculate the total training time
-    training_time_seconds = time.time() - start_time
-
-    # Print the total training time
-    print(f"Total training time: {training_time_seconds} seconds")
-    wandb.finish()
-
 
 if __name__ == '__main__':
     main()

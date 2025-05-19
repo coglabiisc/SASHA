@@ -3,12 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-
-
-
 """
 Exploring Low-Rank Property in Multiple Instance Learning for Whole Slide Image Classification
 Jinxi Xiang et al. ICLR 2023
+
 """
 
 def initialize_weights(model):

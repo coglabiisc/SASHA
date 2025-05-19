@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class FGlobal(nn.Module):
-    def __init__(self, ip_dim=384*3, op_dim=384, hidden_dim=768):
+    def __init__(self, ip_dim=384*3, op_dim=384, hidden_dim=4096):
         # call constructor from superclass
         super().__init__()
     
