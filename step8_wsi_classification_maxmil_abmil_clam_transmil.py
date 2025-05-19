@@ -1,3 +1,11 @@
+'''
+Commands -
+python step8_wsi_classification_maxmil_abmil_clam_transmil.py --arch maxmil --config config/camelyon_config.yml --log_dir LOG_DIR
+--arch abmil
+--arch transmil
+
+'''
+
 import argparse
 import os
 import sys
@@ -35,7 +43,7 @@ def get_arguments():
                                                             'biomedclip', 'path-clip-L-768', 'UNI', 'GigaPath'],
                                                             help='settings of Tip-Adapter in yaml format')
     parser.add_argument("--exp_name", type=str, default="DEBUG", help="Experiment name")
-    parser.add_argument("--log_dir", type=str, default=' /mnt/hdd/naman/naman/results_2025/results/camleyon16/extra', help="Path to logs folder")
+    parser.add_argument("--log_dir", type=str, default= None, help="Path to logs folder")
     parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
     
     args = parser.parse_args()
@@ -71,7 +79,7 @@ def main():
     set_seed(args.seed)
 
     # define datasets and dataloaders
-    train_data, val_data, test_data = build_HDF5_feat_dataset(os.path.join(conf.data_dir, 'patch_feats_pretrain_%s.h5'%conf.pretrain), conf)
+    train_data, val_data, test_data = build_HDF5_feat_dataset(conf.data_dir, conf)
 
     train_loader = DataLoader(train_data, batch_size=conf.B, shuffle=True,num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=True)
     val_loader = DataLoader(val_data, batch_size=conf.B, shuffle=False,num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)

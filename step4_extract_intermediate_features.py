@@ -15,10 +15,10 @@ TCGA ----> config/tcga_config.yml
 
 Cmd -
 CAMELYON16
-python step4_extract_intermediate_features.py --config config/camelyon_config.yml --seed 4 --arch hga --ckpt_path CKPT_PATH --output_path OUTPUT_PATH
+python step4_extract_intermediate_features.py --config config/camelyon_config.yml --seed 4 --arch hafed --ckpt_path CKPT_PATH --output_path OUTPUT_PATH
 
 TCGA
-python step4_extract_intermediate_features.py --config config/tcga_config.yml --seed 1 --arch hga --ckpt_path CKPT_PATH --output_path OUTPUT_PATH
+python step4_extract_intermediate_features.py --config config/tcga_config.yml --seed 1 --arch hafed --ckpt_path CKPT_PATH --output_path OUTPUT_PATH
 
 """
 
@@ -43,9 +43,9 @@ def get_arguments():
     parser = argparse.ArgumentParser('WSI classification training', add_help=False)
 
     # Primary Arguments for HAFED Feature extraction
-    parser.add_argument('--config', dest='config', default='config/camelyon_config.yml', help='settings of dataset in yaml format')
+    parser.add_argument('--config', default=None, help='settings of dataset in yaml format')
     parser.add_argument("--seed", type=int, default=4, help="set the random seed to ensure reproducibility")
-    parser.add_argument("--arch", type=str, default='hga', choices=['ga', 'hga'], help="choice of architecture type")
+    parser.add_argument("--arch", type=str, default='hafed', choices=['acmil', 'hafed'], help="choice of architecture type")
     parser.add_argument('--ckpt_path', default= None, type=str, help='Load checkpoint path for HAFED')
     parser.add_argument('--output_path', type=str, default= None, help='directory path to save the intermediate features')
 
@@ -91,13 +91,13 @@ def main():
     test_loader = DataLoader(test_data, batch_size=conf.B, shuffle=False, num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)
 
     # Define Network
-    if conf.arch == 'ga':
+    if conf.arch == 'acmil':
         model = ACMIL_GA(conf,
                          n_token=conf.n_token,
                          n_masked_patch=conf.n_masked_patch,
                          mask_drop=conf.mask_drop)
 
-    elif conf.arch == 'hga':
+    elif conf.arch == 'hafed':
         model = HAFED(conf,
                       n_token_1=conf.n_token_1,
                       n_token_2=conf.n_token_2,
@@ -105,7 +105,7 @@ def main():
                       n_masked_patch_2=conf.n_masked_patch_2,
                       mask_drop=conf.mask_drop)
     else:
-        raise Exception(f"Enter a valid model architecture name e.g. ga, hga")
+        raise Exception(f"Enter a valid model architecture name e.g. acmil, hafed")
 
     model.to(conf.device)
 
@@ -141,7 +141,7 @@ def extract_features(net, data_loader, device, conf, header, h5_file, extract_fe
         labels = data['label'].to(device)
         slide_id = data['slide_name'][0]
 
-        if conf.arch == 'hga':
+        if conf.arch == 'hafed':
             _, _, _, _, features, _ = net(image_patches, extract_feature=extract_feature)
 
         slide_grp = h5_file.create_group(slide_id)

@@ -13,6 +13,11 @@ Supported SASHA Variants:
 
 Make sure to configure the required paths to checkpoints and datasets before execution.
 
+
+Command
+python step7_inference_with_fe.py --config config/camelyon_sasha_inference_with_fe.yml --seed 4 --log_dir LOG_DIR
+
+
 """
 
 import argparse
@@ -66,16 +71,18 @@ def get_arguments():
     parser.add_argument('--batch_size_hr', type=int, default=1)
     parser.add_argument('--batch_size_lr', type=int, default=512)
     parser.add_argument('--target_patch_size', type=int, default=224)
+    parser.add_argument('--slide_ext', type=str, default=".tif",help="we have two options *.tif, *.svs, or any other compatible can work")
     parser.add_argument('--extract_high_res_features', type=bool, default=True, help="To create a mapping from high resolution to low resolution")
     parser.add_argument('--patch_level_low_res', type=int, default=3)  # Low  represents the magnified level [ Just Make sure that patch level should match from create patches ]
     parser.add_argument('--patch_level_high_res', type=int, default=1)  # High represents the scanning level
 
     # RL Models
-    parser.add_argument('--config', dest='config', default='config/camelyon_sasha_inference_with_fe.yml', help='path to config file')
+    parser.add_argument('--config', default= None, help='path to config file')
     parser.add_argument('--seed', type=int, default=4, help='set the random seed')
-    parser.add_argument('--classifier_arch', default='hga', choices=['ga', 'hga', 'mha'], help='choice of architecture for HACMIL')
+    parser.add_argument('--classifier_arch', default='hafed', choices=['hafed'], help='choice of architecture for HACMIL')
     parser.add_argument('--exp_name', type=str, default='DEBUG', help='name of the exp')
     parser.add_argument('--logs', default='enabled', choices=['enabled', 'disabled'], type=str, help='flag to save logs')
+    parser.add_argument('--log_dir', type=str, default=None, help='directory to save logs')
 
     args = parser.parse_args()
 
@@ -160,7 +167,7 @@ def main():
     start_time = time.time()
 
     # Loading the pretrained encoder ----> For now we are working with ViT pretrained on medical ssl
-    feature_extraction, img_transforms = get_encoder(conf.backbone, pretrain=conf.pretrain, target_img_size=conf.target_patch_size)
+    feature_extraction, img_transforms = get_encoder(conf.backbone, pretrain=conf.pretrain)
     feature_extraction.eval()
     feat_extractor = feature_extraction.to(conf.device)
 
@@ -170,10 +177,7 @@ def main():
     classifier_dict, _, config, _ = load_model(conf.classifier_ckpt_path, args)
     classifier_conf = SimpleNamespace(**config)
 
-    if classifier_conf.arch == 'ga':
-        classifier = ACMIL_GA(classifier_conf, n_token=classifier_conf.n_token,
-                              n_masked_patch=classifier_conf.n_masked_patch, mask_drop=classifier_conf.mask_drop)
-    elif classifier_conf.arch == 'hga':
+    if conf.classifier_arch == 'hafed':
         classifier = HAFED(classifier_conf, n_token_1=classifier_conf.n_token_1,
                            n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1,
                            n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)

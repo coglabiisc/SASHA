@@ -1,0 +1,33 @@
+## RL hyper parameters
+B: 1
+
+# Dataset details
+dataset: camelyon16
+fglobal: 'mlp'
+
+## pretrained backbone
+backbone: 'ViT-S/16'   #'ResNet_50' 'ViT-S/16'
+pretrain: 'medical_ssl' #natural_supervised medical_ssl
+D_feat: 384
+D_inner: 128
+only_ce_as_reward: True
+
+# .tif or .svs raw images folder
+source:                 # Directory path where all the raw images .tif and .svs are stored
+data_h5_dir :           # Directory path generated after step 1 ---> patching
+csv_path :              # Enter csv path from dataset_csv folder
+
+
+# Model weights -
+frac_visit: 0.2
+cosine_threshold: 0.95
+log_dir:                # Directory to store the logs
+classifier_ckpt_path:   # HAFED classifier ckpt path
+mlp_fglobal_ckpt :      # TSU path
+rl_ckpt_path:           # RL SASHA ckpt path
+
+# Extra Hyper params
+n_worker: 8
+pin_memory: False
+n_shot: -1
+dim_reduction: False

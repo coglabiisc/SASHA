@@ -1,0 +1,29 @@
+train_epoch: 100           # number of epochs
+B: 1                       # batch size
+warmup_epoch: 0            # number of warm-up epochs
+reg: 0.0004                # weight decay
+lr: 0.00004
+min_lr: 0
+
+# Dataset details
+frac: 0.2
+cosine_threshold: 0.95
+dataset: camelyon16
+n_class: 2
+
+
+ckpt_path:     # HAFED checkpoint .pt path
+level1_path:   # Intermediate features path created in step4
+level3_path:   # Low resolution feature space from feature extractor
+
+
+# Other hyper-params
+backbone: 'ViT-S/16'
+pretrain: 'medical_ssl'
+nhead: 2
+nlayer: 1
+ff_dim: 512
+dropout: 0.2
+pick_action_from_non_visited_patches: True
+n_worker: 8                          # number of workers
+pin_memory: False                    # use pin memory in dataloader

@@ -17,10 +17,10 @@ TCGA ----> config/tcga_config.yml
 
 Cmd -
 CAMELYON16
-python step3_WSI_classification_HAFED.py --config config/camelyon_config.yml --seed 4 --arch hga --exp_name DEBUG --log_dir LOG_DIR
+python step3_WSI_classification_HAFED.py --config config/camelyon_config.yml --seed 4 --arch hafed --exp_name DEBUG --log_dir LOG_DIR
 
 TCGA
-python step3_WSI_classification_HAFED.py --config config/tcga_config.yml --seed 1 --arch hga --exp_name DEBUG --log_dir LOG_DIR
+python step3_WSI_classification_HAFED.py --config config/tcga_config.yml --seed 1 --arch hafed --exp_name DEBUG --log_dir LOG_DIR
 
 """
 
@@ -51,12 +51,12 @@ def get_arguments():
     parser = argparse.ArgumentParser('WSI classification training', add_help=False)
 
     # Primary Arguments for HAFED Training
-    parser.add_argument('--config', dest='config', default='config/camelyon_config.yml', help='settings of dataset in yaml format')
+    parser.add_argument('--config', dest='config', default=None, help='settings of dataset in yaml format')
     parser.add_argument("--seed", type=int, default=4, help="set the random seed to ensure reproducibility")
-    parser.add_argument("--arch", type=str, default='hga', choices=['ga', 'hga'], help="choice of architecture type")
+    parser.add_argument("--arch", type=str, default='hafed', choices=['acmil', 'hafed'], help="choice of architecture type")
     parser.add_argument("--exp_name", type=str, default="DEBUG", help="Experiment name")
     parser.add_argument('--ckpt_path', type=str, default=None, help='path to checkpoint file')
-    parser.add_argument("--log_dir", type=str, default= ' /mnt/hdd/naman/naman/results_2025/results/camleyon16/extra', help="Path to logs folder")
+    parser.add_argument("--log_dir", type=str, default= None, help="Path to logs folder")
 
 
     # Secondary Arguments
@@ -82,7 +82,7 @@ def main():
         c.update(vars(args))
         conf = Struct(**c)
 
-    if args.arch == "hga" :  # HAFED model is used here
+    if args.arch == "hafed" :  # HAFED model is used here
         hyparams = {
             'dataset': conf.dataset,
             'pretrain': conf.pretrain,
@@ -136,13 +136,13 @@ def main():
 
     # Define Network
 
-    if conf.arch == 'ga':
+    if conf.arch == 'acmil':
         model = ACMIL_GA(conf,
                          n_token=conf.n_token,
                          n_masked_patch=conf.n_masked_patch,
                          mask_drop=conf.mask_drop)
 
-    elif conf.arch == 'hga':
+    elif conf.arch == 'hafed':
         model = HAFED(conf,
                       n_token_1=conf.n_token_1,
                       n_token_2=conf.n_token_2,
@@ -150,7 +150,7 @@ def main():
                       n_masked_patch_2=conf.n_masked_patch_2,
                       mask_drop=conf.mask_drop)
     else :
-        raise Exception(f"Enter a valid model architecture name e.g. ga, hga")
+        raise Exception(f"Enter a valid model architecture name e.g. acmil, hafed")
 
     model.to(conf.device)
     
@@ -222,7 +222,7 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, con
 
         # Compute loss
 
-        if conf.arch == 'ga':
+        if conf.arch == 'acmil':
             sub_preds, slide_preds, attn = model(image_patches)
             loss1 = criterion(slide_preds, labels)
 
@@ -248,7 +248,7 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, con
             metric_logger.update(slide_loss=loss1.item())
 
 
-        if conf.arch == 'hga':
+        if conf.arch == 'hafed':
             sub_preds, slide_preds, attn_1, attn_2, features, attn_raw = model(image_patches)
 
             loss1 = criterion(slide_preds, labels)
@@ -325,7 +325,7 @@ def evaluate(net, criterion, data_loader, device, conf, header, epoch):
         slide_id = data['slide_name'][0]
 
 
-        if conf.arch == 'ga':
+        if conf.arch == 'acmil':
             sub_preds, slide_preds, attn = net(image_patches)
             div_loss = torch.sum(F.softmax(attn, dim=-1) * F.log_softmax(attn, dim=-1)) / attn.shape[1]
             loss = criterion(slide_preds, labels)

@@ -41,7 +41,7 @@ def split_dataset_fglobal_camelyon(file_path_level1, file_path_level3, conf):
     h5_data_level1 = h5py.File(os.path.join(file_path_level1, f'patch_feats_pretrain_{conf.pretrain}.h5'), 'r')
     h5_data_level3 = h5py.File(os.path.join(file_path_level3, f'patch_feats_pretrain_{conf.pretrain}.h5'), 'r')
 
-    split_file_path = './splits/%s/split_%s.json' % (conf.dataset, conf.seed)
+    split_file_path = './dataset_csv/%s/splits/split_%s.json' % (conf.dataset, conf.seed)
 
     if os.path.exists(split_file_path):
         with open(split_file_path, 'r') as json_file:
@@ -77,8 +77,6 @@ def split_dataset_tcga(file_path, conf):
 
     # Loading the tcga.csv file for complete dataset
     df = pd.read_csv(conf.data_csv)
-    name_mapping = dict(zip(df["slide_id_short"], df["slide_file_name"]))
-
     # Loading splits
     split_file_path = './dataset_csv/%s/splits/split_%s.json'%(conf.dataset, conf.seed)
 
@@ -110,10 +108,6 @@ def split_dataset_fglobal_tcga(file_path_level1, file_path_level3, conf):
 
     h5_data_level1 = h5py.File(os.path.join(file_path_level1, f'patch_feats_pretrain_{conf.pretrain}.h5'), 'r')
     h5_data_level3 = h5py.File(os.path.join(file_path_level3, f'patch_feats_pretrain_{conf.pretrain}.h5'), 'r')
-
-    # Loading the tcga.csv file for complete dataset
-    df = pd.read_csv(conf.data_csv)
-    name_mapping = dict(zip(df["slide_id_short"], df["slide_file_name"]))
 
     # Loading splits
     split_file_path = './dataset_csv/%s/splits/split_%s.json' % (conf.dataset, conf.seed)

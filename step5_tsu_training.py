@@ -17,10 +17,10 @@ Key Variables:
 
 Command -
 CAMELYON16
-python step5_tsu_training.py --config config/camelyon_tsu_config.yml --seed 4 --arch hga --log_dir LOG_DIR
+python step5_tsu_training.py --config config/camelyon_tsu_config.yml --seed 4 --arch hafed --log_dir LOG_DIR
 
 TCGA
-python step5_tsu_training.py --config config/tcga_tsu_config.yml --seed 4 --arch hga --log_dir LOG_DIR
+python step5_tsu_training.py --config config/tcga_tsu_config.yml --seed 4 --arch hafed --log_dir LOG_DIR
 
 """
 
@@ -47,10 +47,10 @@ def get_arguments():
     parser = argparse.ArgumentParser('TSU Training', add_help=False)
     parser.add_argument('--config', dest='config', default='config/camelyon_tsu_config.yml', help='settings of dataset in yaml format')
     parser.add_argument("--seed", type=int, default=4, help="set the random seed to ensure reproducibility")
-    parser.add_argument("--arch", type=str, default='hga', choices=['ga', 'hga'], help="choice of architecture type e.e. hga or ga")
+    parser.add_argument("--arch", type=str, default='hafed', choices=['hafed'], help="choice of architecture type e.e. hafed")
     parser.add_argument("--exp_name", type=str, default="DEBUG", help="Experiment name")
     parser.add_argument('--logs', default='enabled', choices=['enabled', 'disabled'], help='tensorboard logging')
-    parser.add_argument("--log_dir", type=str, default= '/mnt/hdd/naman/naman/results_2025/results/camleyon16/extra', help="Path to logs folder")
+    parser.add_argument("--log_dir", type=str, default= None, help="Path to logs folder")
 
     args = parser.parse_args()
 

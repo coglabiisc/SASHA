@@ -1,11 +1,14 @@
+'''
+CAMELYON16
+python step8_wsi_classification_dtfd.py --config config/camelyon_config.yml --log_dir LOG_DIR
 
+'''
 import argparse
 import os
 from pprint import pprint
 
 import torch
 import torchmetrics
-import wandb
 import yaml
 from timm.utils import accuracy
 from torch import nn
@@ -16,6 +19,7 @@ from architecture.Attention import Attention_Gated as Attention
 from architecture.Attention import Attention_with_Classifier
 from architecture.network import Classifier_1fc, DimReduction
 from datasets.datasets import build_HDF5_feat_dataset
+from utils.gpu_utils import check_gpu_availability
 from utils.utils import MetricLogger, SmoothedValue, adjust_learning_rate
 from utils.utils import Struct, set_seed
 from utils.utils import get_cam_1d
@@ -23,7 +27,7 @@ from utils.utils import get_cam_1d
 
 def get_arguments():
     parser = argparse.ArgumentParser('Patch classification training', add_help=False)
-    parser.add_argument('--config', dest='config', default='config/camelyon_config.yml', help='settings of Tip-Adapter in yaml format')
+    parser.add_argument('--config', dest='config', default= None, help='settings of Tip-Adapter in yaml format')
     parser.add_argument("--eval-only", action="store_true", help="evaluation only")
     parser.add_argument("--seed", type=int, default=4, help="set the random seed to ensure reproducibility")
     parser.add_argument('--logs_mode', default='disabled', choices=['offline', 'online', 'disabled'], help='the model of wandb')
@@ -38,9 +42,15 @@ def get_arguments():
     parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
 
     parser.add_argument("--exp_name", type=str, default="DEBUG", help="Experiment name")
-    parser.add_argument("--log_dir", type=str, default=' /mnt/hdd/naman/naman/results_2025/results/camleyon16/extra', help="Path to logs folder")
+    parser.add_argument("--log_dir", type=str, default= None, help="Path to logs folder")
 
     args = parser.parse_args()
+
+    # Adding Device Details
+    gpus = check_gpu_availability(3, 1, [])
+    print(f"occupied {gpus}")
+    args.device = torch.device(f"cuda:{gpus[0]}")
+
     return args
 
 def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion, data_loader, optimizer0, optimizer1, device, epoch, conf, distill='MaxMinS'):
@@ -72,6 +82,8 @@ def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion,
 
         tfeat_tensor = data['input'].to(device, dtype=torch.float32)
         tfeat_tensor = tfeat_tensor[0]
+        if tfeat_tensor.ndim == 3 :
+            tfeat_tensor = tfeat_tensor.reshape(tfeat_tensor.shape[0] * tfeat_tensor.shape[1], tfeat_tensor.shape[2])
         tslideLabel = data['label'].to(device)
 
         instance_per_group = conf.total_instance // conf.numGroup
@@ -138,12 +150,12 @@ def train_one_epoch(classifier, attention, dimReduction, UClassifier, criterion,
         metric_logger.update(loss0=loss0.item())
         metric_logger.update(loss1=loss1.item())
 
-        if conf.wandb_mode != 'disabled':
+        if conf.logs_mode != 'disabled':
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
             """
-            wandb.log({'loss0': loss0}, commit=False)
-            wandb.log({'loss1': loss1})
+            conf.writer.add_scalar('loss/loss0', loss0, epoch)
+            conf.writer.add_scalar('loss/loss1', loss1, epoch)
 
 # Disable gradient calculation during evaluation
 @torch.no_grad()
@@ -164,6 +176,8 @@ def evaluate(classifier, attention, dimReduction, UClassifier, criterion, data_l
     for data in metric_logger.log_every(data_loader, 100, header):
         tfeat = data['input'].to(device, dtype=torch.float32)
         tfeat = tfeat[0]
+        if tfeat.ndim == 3 :
+            tfeat = tfeat.reshape(tfeat.shape[0] * tfeat.shape[1], tfeat.shape[2])
         tslideLabel = data['label'].to(device)
 
         midFeat = dimReduction(tfeat)
@@ -256,7 +270,7 @@ def main():
     set_seed(args.seed)
 
     # define datasets and dataloaders
-    train_data, val_data, test_data = build_HDF5_feat_dataset(os.path.join(conf.data_dir, 'patch_feats_pretrain_%s.h5'%conf.pretrain), conf)
+    train_data, val_data, test_data = build_HDF5_feat_dataset(conf.data_dir, conf)
 
     train_loader = DataLoader(train_data, batch_size=conf.B, shuffle=True,num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=True)
     val_loader = DataLoader(val_data, batch_size=conf.B, shuffle=False,num_workers=conf.n_worker, pin_memory=conf.pin_memory, drop_last=False)
@@ -286,7 +300,7 @@ def main():
         val_auc, val_acc, val_f1, val_loss = evaluate(classifier, attention, dimReduction, attCls, criterion, val_loader, conf.device, conf, 'Val')
         test_auc, test_acc, test_f1, test_loss = evaluate(classifier, attention, dimReduction, attCls, criterion, test_loader, conf.device, conf, 'Test')
 
-        if conf.wandb_mode != 'disabled':
+        if conf.logs_mode != 'disabled':
 
             conf.writer.add_scalar('test/test_acc1', test_acc, epoch)
             conf.writer.add_scalar('test/test_auc', test_auc, epoch)

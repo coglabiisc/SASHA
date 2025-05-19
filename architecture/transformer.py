@@ -249,6 +249,7 @@ class ABMIL(nn.Module):
 
 
 class ACMIL_GA(nn.Module):
+
     def __init__(self, conf, D=128, droprate=0, n_token=1, n_masked_patch=0, mask_drop=0):
         super(ACMIL_GA, self).__init__()
         self.dimreduction = DimReduction(conf.D_feat, conf.D_inner)
@@ -264,6 +265,11 @@ class ACMIL_GA(nn.Module):
 
     def forward(self, x): ## x: N x L
         x = x[0]
+
+        # Need to check if the dimension are greater == 3 i.e. (N, k, d) ----> convert to (Nxk , d)
+        if x.ndim == 3:
+            x = x.reshape(x.shape[0] * x.shape[1] , x.shape[2])
+
         x = self.dimreduction(x)
         A = self.attention(x)  ## K x N
 

@@ -14,10 +14,15 @@ Supported SASHA Variants:
 
 Make sure to configure the required paths to checkpoints and datasets before execution.
 
+CAMELYON16
+python step7_inference.py --config config_prince/camelyon_sasha_inference.yml --seed 4
+
+TCGA
+python step7_inference.py --config config_prince/tcga_sasha_inference.yml --seed 1
+
 """
 
 import argparse
-import os
 from pprint import pprint
 from types import SimpleNamespace
 
@@ -26,13 +31,11 @@ import torchmetrics
 import yaml
 from sklearn.metrics import balanced_accuracy_score
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
-from envs.WSI_cosine_env import WSICosineObservationEnv
-from envs.WSI_env import WSIObservationEnv
-from architecture.transformer import ACMIL_GA
 from architecture.transformer import HAFED
 from datasets.datasets import build_HDF5_feat_dataset_2
+from envs.WSI_cosine_env import WSICosineObservationEnv
+from envs.WSI_env import WSIObservationEnv
 from modules.fglobal_mlp import FGlobal
 from rl_algorithms.ppo import Agent, Actor, Critic
 from step4_extract_intermediate_features import load_model
@@ -43,9 +46,9 @@ from utils.utils import Struct, set_seed
 
 def get_arguments():
     parser = argparse.ArgumentParser('SASHA inference', add_help=False)
-    parser.add_argument( '--config', dest='config', default='config/camelyon_sasha_inference.yml', help='path to config file')
+    parser.add_argument( '--config', default= None, help='path to config file')
     parser.add_argument('--seed', type=int, default= 4, help='set the random seed')
-    parser.add_argument('--classifier_arch', default='hga', choices=['ga', 'hga', 'mha'], help='choice of architecture for HACMIL')
+    parser.add_argument('--classifier_arch', default='hafed', choices=['hafed'], help='choice of architecture for HACMIL')
     parser.add_argument('--exp_name', type=str, default='DEBUG', help='name of the exp')
     parser.add_argument('--logs', default='enabled', choices=['enabled', 'disabled'], type=str, help='flag to save logs')
     args = parser.parse_args()
@@ -86,8 +89,6 @@ def main():
         c.update(vars(args))
         conf = Struct(**c)
 
-    conf.writer = SummaryWriter(log_dir=os.path.join(conf.log_dir, "logs", conf.exp_name))
-
     hyparams = {
         'dataset': conf.dataset,
         'pretrain': conf.pretrain,
@@ -97,9 +98,6 @@ def main():
         'only_ce_as_reward': conf.only_ce_as_reward,
     }
     hyparams['fraction of visit'] = conf.frac_visit
-
-    hyparams_text = "\n".join([f"**{key}**: {value}" for key, value in hyparams.items()])
-    conf.writer.add_text("Hyperparameters", hyparams_text)
 
     print("Used config:")
     pprint(vars(conf))
@@ -117,10 +115,7 @@ def main():
     classifier_dict, _, config, _ = load_model(conf.classifier_ckpt_path, args)
     classifier_conf = SimpleNamespace(**config)
 
-    if classifier_conf.arch == 'ga':
-        classifier = ACMIL_GA(classifier_conf, n_token=classifier_conf.n_token,
-                              n_masked_patch=classifier_conf.n_masked_patch, mask_drop=classifier_conf.mask_drop)
-    elif classifier_conf.arch == 'hga':
+    if conf.classifier_arch == 'hafed':
         classifier = HAFED(classifier_conf, n_token_1=classifier_conf.n_token_1,
                            n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1,
                            n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)

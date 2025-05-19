@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from nystrom_attention import NystromAttention
+from architecture.nystrom_attention import NystromAttention
 
 
 class TransLayer(nn.Module):
