@@ -226,16 +226,16 @@ def get_arguments() :
     parser = argparse.ArgumentParser(description='Feature Extraction')
 
     # Primary Arguments 
-    parser.add_argument('--dataset_name', type=str, default='tcga', choices=['camelyon16', 'tcga'])
-    parser.add_argument('--data_h5_dir', type=str, default="/media/internal_8T/naman/test/tcga")
-    parser.add_argument('--data_slide_dir', type=str, default='/media/internal_8T/naman/tcga_sample_files')
+    parser.add_argument('--dataset_name', type=str, default=None, choices=['camelyon16', 'tcga'])
+    parser.add_argument('--data_h5_dir', type=str, default= None)
+    parser.add_argument('--data_slide_dir', type=str, default= None)
     parser.add_argument('--slide_ext', type=str, default=".svs",help="we have two options *.tif, *.svs, or any other compatible can work")
-    parser.add_argument('--csv_path', type=str, default="dataset_csv/tcga/tcga.csv")
-    parser.add_argument('--feat_dir', type=str, default="/media/internal_8T/naman/test/tcga/features")
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--extract_high_res_features', type=bool, default=False, help="To create a mapping from high resolution to low resolution")
-    parser.add_argument('--patch_level_low_res', type=int, default=2)  # Low  represents the magnified level [ Just Make sure that patch level should match from create patches ]
-    parser.add_argument('--patch_level_high_res', type=int, default=1)  # High represents the scanning level
+    parser.add_argument('--csv_path', type=str, default= None)
+    parser.add_argument('--feat_dir', type=str, default= None)
+    parser.add_argument('--batch_size', type=int, default= None)
+    parser.add_argument('--extract_high_res_features', type=bool, default= None, help="To create a mapping from high resolution to low resolution")
+    parser.add_argument('--patch_level_low_res', type=int, default= None)  # Low  represents the magnified level [ Just Make sure that patch level should match from create patches ]
+    parser.add_argument('--patch_level_high_res', type=int, default= None)  # High represents the scanning level
     parser.add_argument('--time_csv', type=str, default=None, help='store the features time per slide')
     parser.add_argument('--lr_time_col_name', type=str, default=None, help='column name for time_csv_col_name')
     parser.add_argument('--hr_time_col_name', type=str, default=None, help='column name for time_csv_col_name')
@@ -246,8 +246,10 @@ def get_arguments() :
     parser.add_argument('--pretrain', type=str, default='medical_ssl', choices=['medical_ssl'])
     parser.add_argument('--no_auto_skip', default=True, action='store_true')
     parser.add_argument('--target_patch_size', type=int, default=224)
+
+    args = parser.parse_args()
     
-    return parser
+    return args
     
 
 if __name__ == '__main__':
@@ -255,8 +257,8 @@ if __name__ == '__main__':
     # Initialize cuda device
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    parser = get_arguments()
-    args = parser.parse_args()
+    args = get_arguments()
+    args.device = device
     args = update_arguments(args= args)
 
     print('Initializing dataset')
@@ -284,7 +286,7 @@ if __name__ == '__main__':
     h5file_hr = h5py.File(h5_path_hr, "w")
     
     # Loading the pretrained encoder ----> For now we are working with resnet-50 architecture
-    model, img_transforms = get_encoder(args.model_name, pretrain= args.pretrain, target_img_size=args.target_patch_size)
+    model, img_transforms = get_encoder(args.model_name, pretrain= args.pretrain)
     model.eval()
     model = model.to(device)
 
@@ -336,7 +338,7 @@ if __name__ == '__main__':
         if args.extract_high_res_features:
 
             hr_features, hr_coords, hr_total_time, lr_features, lr_coords, lr_total_time = compute_w_loader(
-                loader=loader, model=model, verbose=1)
+                loader=loader, model=model, verbose=1, device = device)
 
             time_elapsed = time.time() - time_start
             print('\ncomputing features for {} took {} s'.format(slide_id, time_elapsed))
@@ -356,7 +358,7 @@ if __name__ == '__main__':
 
         else:
 
-            features, coords, total_time = compute_w_loader(loader=loader, model=model, verbose=1)
+            features, coords, total_time = compute_w_loader(loader=loader, model=model, verbose=1, device = device, extract_high_res_features = args.extract_high_res_features )
 
             # Storing time details -->
             # Check if slide_id exists

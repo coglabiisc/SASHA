@@ -21,7 +21,6 @@ csv_path :              # Enter csv path from dataset_csv folder
 # Model weights -
 frac_visit: 0.2
 cosine_threshold: 0.95
-log_dir:                # Directory to store the logs
 classifier_ckpt_path:   # HAFED classifier ckpt path
 mlp_fglobal_ckpt :      # TSU path
 rl_ckpt_path:           # RL SASHA ckpt path

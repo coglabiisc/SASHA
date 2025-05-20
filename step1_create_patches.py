@@ -408,7 +408,7 @@ if __name__ == '__main__':
 
 
     # Creating dataframe to store the time for patching for each slide
-    time_df = create_time_df(csv_file_path= args.time_csv, column_name_ls = ['slide_name', args.time_csv_column])
+    time_df = create_time_df(csv_file_path= args.time_csv, column_name_ls = ['slide_name', args.time_csv_col_name])
 
     seg_times, patch_times, time_df = seg_and_patch(**directories, **parameters,
                                                     patch_size=args.patch_size,
