@@ -1,4 +1,5 @@
 import torch
+from torch import nn
 
 
 ### For Intermediate Reward
@@ -66,6 +67,22 @@ class WSICosineObservationEnv():
     @torch.no_grad()
     def step(self, action, state_update_net, classifier_net, device, hr_feature):
 
+        # Original Code
+        if self.visited_all_patches:
+            self.current_time_step += 1
+            done = False
+            slide_preds, attn = classifier_net.classify(self.current_state)
+            loss = nn.CrossEntropyLoss()(slide_preds, self.label)
+            self.reward.append(-loss.item())
+            reward = -loss.item()
+            if self.current_time_step == self.max_time_steps:
+                done = True
+                final_state = self.current_state.clone()
+                self.reset()
+                return final_state, reward, done
+            else:
+                return self.current_state, reward, done
+
         self.current_time_step += 1
         self.visited_patches[action] = 1
         self.visited_patch_idx.append(action.item())
@@ -106,6 +123,9 @@ class WSICosineObservationEnv():
             final_state = self.current_state.clone()
             self.reset()
             return final_state, None, done
+
+        if self.visited_patches.sum().item() == self.N:
+            self.visited_all_patches = True
 
         return self.current_state.clone(), None, done
 

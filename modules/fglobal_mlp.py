@@ -1,6 +1,6 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from prettytable import PrettyTable
 
 
 class FGlobal(nn.Module):
@@ -21,9 +21,31 @@ class FGlobal(nn.Module):
         return x
     
 
-    
-def loaf_f_global(ckpt_path):
-    mlp = FGlobal()#.cuda()
-    mlp.load_state_dict(torch.load(ckpt_path))
-    mlp.eval()
-    return mlp
+def print_model_summary(model):
+    table = PrettyTable(["Layer", "Input Dim", "Output Dim", "Param Count"])
+    total_params = 0
+
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            param_count = param.numel()
+            total_params += param_count
+
+            # Extract input/output dims
+            shape = list(param.shape)
+            if 'weight' in name and len(shape) == 2:
+                input_dim, output_dim = shape[1], shape[0]
+            else:
+                input_dim = '-'
+                output_dim = shape
+
+            table.add_row([name, input_dim, output_dim, param_count])
+
+    print("\nModel Summary for FGlobal:\n")
+    print(table)
+    print(f"\nTotal trainable parameters: {total_params:,}")
+
+
+# Example usage
+if __name__ == "__main__":
+    model = FGlobal()
+    print_model_summary(model)

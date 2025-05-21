@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import Polygon
 from torch.utils.data import DataLoader
 
-from architecture.transformer import ACMIL_GA, HAFED
+from architecture.transformer import HAFED
 from datasets.datasets import build_HDF5_feat_dataset_2
 from envs.WSI_cosine_env import WSICosineObservationEnv
 from envs.WSI_env import WSIObservationEnv
@@ -30,15 +30,15 @@ from utils.utils import Struct, set_seed
 
 def get_arguments() :
     parser = argparse.ArgumentParser('RL training', add_help=False)
-    parser.add_argument('--config', dest='config', default='config/camelyon_sasha_inference.yml.yml', help='path to config file')
+    parser.add_argument('--config', default=None, help='path to config file')
     parser.add_argument('--slide_name', type=str, default='test_068', help='Get the slide name for visualization')
     parser.add_argument('--ext', type=str, default = 'tif', help = 'tif, svs')
-    parser.add_argument('--wsi_images_dir_path', type=str, default='/media/internal_8T/karm/karm_8T_backup/camelyon16/images/all', help='Get the path where all the raw *.tif / *.svs images are present')
-    parser.add_argument('--annotation_dir_path', type=str, default = '/media/internal_8T/karm/karm_8T_backup/camelyon16/annotations', help= 'Get the path where all the annotation are there to form the boundary over the region')
-    parser.add_argument('--output_dir_path', type= str, default='/media/internal_8T/naman/rlogist/images')
+    parser.add_argument('--wsi_images_dir_path', type=str, default=None, help='Get the path where all the raw *.tif / *.svs images are present')
+    parser.add_argument('--annotation_dir_path', type=str, default = None, help= 'Get the path where all the annotation are there to form the boundary over the region')
+    parser.add_argument('--output_dir_path', type= str, default=None)
     parser.add_argument('--level', type= int, default = 6, help= 'this will determine the downsample factor to save the image')
     parser.add_argument('--seed', type=int, default = 4, help = 'this will help to determine which seed to take for further analysis')
-    parser.add_argument('--classifier_arch', default='hga', choices=['ga', 'hga'], help='choice of architecture for HAFED')
+    parser.add_argument('--classifier_arch', default='hafed', choices=['hafed'], help='choice of architecture for HAFED')
     parser.add_argument('--patch_level_base', default= 2048, help = 'determine the patch size at the highest resolution present in wsi, to downscale properly' )
     parser.add_argument('--text_font_size', default = 48, help = 'determine the size of the text font in pixels')
     args = parser.parse_args()
@@ -76,10 +76,8 @@ def load_configuration_file():
     classifier_dict, _, config, _ = load_model(conf.classifier_ckpt_path, args)
     classifier_conf = SimpleNamespace(**config)
 
-    if classifier_conf.arch == 'ga':
-        classifier = ACMIL_GA(classifier_conf, n_token=classifier_conf.n_token,
-                              n_masked_patch=classifier_conf.n_masked_patch, mask_drop=classifier_conf.mask_drop)
-    elif classifier_conf.arch == 'hga':
+
+    if conf.classifier_arch == 'hafed':
         classifier = HAFED(classifier_conf, n_token_1=classifier_conf.n_token_1,
                            n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1,
                            n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)
@@ -216,7 +214,7 @@ def evaluate_policy_per_slide(model, fglobal, classifier, data_loader, header, d
     attention_weights = attn
 
     # Loading coordinates --->
-    coords = get_slide_coords(conf.level3_h5_path, slide_name)
+    coords = get_slide_coords(conf.level3_path, slide_name)
 
     assert coords.shape[0] == state.shape[1]
 
@@ -244,6 +242,19 @@ def get_slide_coords(features_path, slide_name):
     Raises:
         KeyError: If the slide or 'coords' key is not found.
     """
+
+    # List .h5 files
+    h5_files = [f for f in os.listdir(features_path) if f.endswith('.h5')]
+
+    # Get the single .h5 file path
+    if len(h5_files) == 1:
+        h5_file_path = os.path.join(features_path, h5_files[0])
+        print("Found .h5 file:", h5_file_path)
+    else:
+        print(f"Expected 1 .h5 file, but found {len(h5_files)}.")
+
+    features_path = h5_file_path
+
     with h5py.File(features_path, 'r') as f:
         if slide_name not in f:
             raise KeyError(f"Slide '{slide_name}' not found in HDF5 file.")
@@ -327,7 +338,7 @@ def draw_patches_selected_by_rl_agent(
         colormap = cm.get_cmap("Blues_r")  # Reverse for dark-to-light blue
         box_w = int(patch_size_level0 / downscale_factor)
 
-        for i, ((x_lvl0, y_lvl0)) in enumerate(zip(coords_patches_selected_by_agent_ls)):
+        for i, ((x_lvl0, y_lvl0)) in enumerate(coords_patches_selected_by_agent_ls):
             x_scaled = int(x_lvl0 / downscale_factor)
             y_scaled = int(y_lvl0 / downscale_factor)
             frac = i / max(1, len(coords_patches_selected_by_agent_ls) - 1) * 0.2
@@ -441,10 +452,10 @@ def draw_patches_updated_by_ssu(
         colormap = cm.get_cmap("Oranges_r")
         box_w = int(patch_size_level0 / downscale_factor)
 
-        for i, (patch_group, tumor_flags) in enumerate(zip(coords_similar_patches_selected_by_agent_ls)):
+        for i, (patch_group) in enumerate(coords_similar_patches_selected_by_agent_ls):
             frac = i / max(1, len(coords_similar_patches_selected_by_agent_ls) - 1) * 0.2
             color = tuple(int(255 * c) for c in colormap(norm(frac))[:3])
-            for (x_lvl0, y_lvl0), tumor_flag in zip(patch_group, tumor_flags):
+            for (x_lvl0, y_lvl0) in patch_group:
                 x_scaled = int(x_lvl0 / downscale_factor)
                 y_scaled = int(y_lvl0 / downscale_factor)
                 cv2.rectangle(
