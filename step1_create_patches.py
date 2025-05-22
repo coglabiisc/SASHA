@@ -153,12 +153,15 @@ def seg_and_patch(source, save_dir, patch_save_dir, mask_save_dir, stitch_save_d
                   patch=False, auto_skip=True,
                   process_list=None,
                   time_df = None,
-                  time_df_column_name = None ):
+                  time_df_column_name = None,
+                  slide_name = None):
 
-
-    slides = glob(source + f'/*.{args.extension}')
-    slides = [slide for slide in slides if os.path.isfile(os.path.join(source, slide))]
-    print("Slides: ", len(slides))
+    if slide_name is not None :
+        slides = [os.path.join(source, f'{slide_name}.tif')]
+    else :
+        slides = glob(source + f'/*.{args.extension}')
+        slides = [slide for slide in slides if os.path.isfile(os.path.join(source, slide))]
+        print("Slides: ", len(slides))
 
     if process_list is None:
         df = initialize_df(slides, seg_params, filter_params, vis_params, patch_params)

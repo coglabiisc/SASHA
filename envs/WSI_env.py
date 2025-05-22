@@ -1,19 +1,6 @@
-import pdb
-import os
-import math
-from sre_parse import State
-import numpy as np
-import pandas as pd
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from typing import Any, Optional, Tuple
-import gym
-from gym import spaces
-import h5py
-import time
 
 class WSIObservationEnv():
     """
@@ -101,9 +88,9 @@ class WSIObservationEnv():
             done = False
 
 
-            #update the state
-            #check whether all the patches are visited
-            #if so return the final state with reward
+            # update the state
+            # check whether all the patches are visited
+            # if so return the final state with reward
             if self.visited_patches.sum().item() == self.N or self.current_time_step == self.max_time_steps:
                 slide_preds, attn = classifier_net.classify(new_state)
                 pred = torch.softmax(slide_preds, dim=-1)

@@ -15,8 +15,7 @@ Make sure to configure the required paths to checkpoints and datasets before exe
 
 
 Command
-python step7_inference_with_fe.py --config config/camelyon_sasha_inference_with_fe.yml --seed 4 --log_dir LOG_DIR
-
+python step7_inference_with_fe.py --config config/camelyon_sasha_inference_with_fe.yml --seed 4 --save_dir SAVE_DIR
 
 """
 
@@ -25,64 +24,49 @@ import json
 import os
 import time
 from collections import defaultdict
-from pprint import pprint
 from types import SimpleNamespace
 
-import openslide
-import pandas as pd
 import torch
-import torchmetrics
 import yaml
 from sklearn.metrics import balanced_accuracy_score
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
-from envs.WSI_cosine_env_inference import WSICosineObservationEnv
-from architecture.transformer import ACMIL_GA
 from architecture.transformer import HAFED
-from datasets.dataset_h5 import Whole_Slide_Bag_FP
-from models_features_extraction import get_encoder
+from envs.WSI_cosine_env_inference import WSICosineObservationEnv_inference
+from tqdm import tqdm
+
+from datasets.dataset_h5 import Dataset_All_Bags
 from modules.fglobal_mlp import FGlobal
 from rl_algorithms.ppo import Agent, Actor, Critic
-from step4_extract_intermediate_features import load_model
-from step7_inference import load_policy_model
 from utils.gpu_utils import check_gpu_availability
-from utils.utils import Struct, set_seed
-from step2_extract_features import compute_w_loader
+from utils.inference_utils import Helper
+from utils.utils import Struct
+import torchmetrics
 
 
 def get_arguments():
-    parser = argparse.ArgumentParser('SASHA inference with feature extraction', add_help=False)
 
-    # Patching arguments ---->
+    parser = argparse.ArgumentParser('Inference with Feature Extraction', add_help=False)
+
+    # Patching arguments
     parser.add_argument('--step_size', type=int, default=256, help='step_size')
     parser.add_argument('--patch_size', type=int, default=256, help='patch_size')
     parser.add_argument('--extension', default='tif', help='extension to processes data type, e.g. *.svs, *.tif')
-    parser.add_argument('--patch_level', type=int, default=3, help='downsample level at which to patch')
 
-    parser.add_argument('--patch', default=True, action='store_true')
-    parser.add_argument('--seg', default=True, action='store_true')
-    parser.add_argument('--stitch', default=True, action='store_true')
-    parser.add_argument('--no_auto_skip', default=True, action='store_false')
-    parser.add_argument('--process_list', type=str, default=None, help='name of list of images to process with parameters (.csv)')
-    parser.add_argument('--preset', default=None, type=str, help='predefined profile of default segmentation and filter parameters (.csv)')
-
-    # Feature extraction arguments ---->
+    # Feature Extraction arguments
     parser.add_argument('--batch_size_hr', type=int, default=1)
     parser.add_argument('--batch_size_lr', type=int, default=512)
     parser.add_argument('--target_patch_size', type=int, default=224)
-    parser.add_argument('--slide_ext', type=str, default=".tif",help="we have two options *.tif, *.svs, or any other compatible can work")
+    parser.add_argument('--slide_ext', type=str, default="tif", help="we have two options tif, svs, or any other compatible can work")
     parser.add_argument('--extract_high_res_features', type=bool, default=True, help="To create a mapping from high resolution to low resolution")
     parser.add_argument('--patch_level_low_res', type=int, default=3)  # Low  represents the magnified level [ Just Make sure that patch level should match from create patches ]
     parser.add_argument('--patch_level_high_res', type=int, default=1)  # High represents the scanning level
 
     # RL Models
-    parser.add_argument('--config', default= None, help='path to config file')
+    parser.add_argument('--classifier_arch', default='hafed', help='choice of architecture for HAFED')
+    parser.add_argument('--config', default=None, type=str, help='config file path')
     parser.add_argument('--seed', type=int, default=4, help='set the random seed')
-    parser.add_argument('--classifier_arch', default='hafed', choices=['hafed'], help='choice of architecture for HACMIL')
-    parser.add_argument('--exp_name', type=str, default='DEBUG', help='name of the exp')
-    parser.add_argument('--logs', default='enabled', choices=['enabled', 'disabled'], type=str, help='flag to save logs')
-    parser.add_argument('--log_dir', type=str, default=None, help='directory to save logs')
+    parser.add_argument('--save_dir', default=None, help= 'folder path to save intermediate steps')
+
 
     args = parser.parse_args()
 
@@ -94,120 +78,65 @@ def get_arguments():
     return args
 
 
-
-def compute_w_loader_2(model, data, device):
-    """
-	args:
-		output_path: directory to save computed features (.h5 file)
-		model: pytorch model
-		verbose: level of feedback
-	"""
-
-    with torch.inference_mode():
-
-        hr_img = data['hr_img']
-        hr_coords = data['hr_coords']
-        hr_time = data['hr_time']
-
-        hr_img = hr_img.unsqueeze(0)
-
-        # Step 1 -  Obtaining H.R. Image Features
-        start_time_hr = time.time()
-        mapping_factor = hr_img.shape[1]
-        hr_batch = hr_img
-        hr_batch = torch.reshape(hr_batch, (-1, hr_batch.shape[-3], hr_batch.shape[-2], hr_batch.shape[-1]))
-        hr_batch = hr_batch.to(device, non_blocking=True)
-        hr_features = model(hr_batch)
-        hr_features = torch.reshape(hr_features, (-1, mapping_factor, hr_features.shape[-1]))
-        hr_features = hr_features.cpu()  # Op : (k, 1024)
-        end_time_hr = time.time()
-
-        # Adding them to list
-        total_time_hr = hr_time + end_time_hr - start_time_hr
-
-    return hr_features, hr_coords, total_time_hr
+@torch.no_grad()
+def load_agent(conf):
+    dict = torch.load(conf.rl_ckpt_path, map_location=conf.device)
+    config = dict['config']
+    model_dict = dict['model']
+    return model_dict, config
 
 
-def main():
+@torch.no_grad()
+def load_model(ckpt_path, device):
+    dict = torch.load(ckpt_path, map_location=device)
+    config = dict['config']
+    model_dict = dict['model']
+    return model_dict, config
 
-    # Load arguments
-    args = get_arguments()
-
-    with open(args.config, 'r') as ymlfile:
-        c = yaml.load(ymlfile, Loader=yaml.FullLoader)
-        c.update(vars(args))
-        conf = Struct(**c)
-
-    conf.writer = SummaryWriter(log_dir=os.path.join(conf.log_dir, "logs", conf.exp_name))
-
-    hyparams = {
-        'dataset': conf.dataset,
-        'pretrain': conf.pretrain,
-        'classifier_arch': conf.classifier_arch,
-        'seed': conf.seed,
-        'frac_visit': conf.frac_visit,
-        'only_ce_as_reward': conf.only_ce_as_reward,
-    }
-    hyparams['fraction of visit'] = conf.frac_visit
-
-    hyparams_text = "\n".join([f"**{key}**: {value}" for key, value in hyparams.items()])
-    conf.writer.add_text("Hyperparameters", hyparams_text)
-
-    print("Used config:")
-    pprint(vars(conf))
-
-    # Loading seed
-    set_seed(args.seed)
-
-    # Introducing variable to store the details
-    time_dict = defaultdict(list)
-    y_pred = []
-    y_true = []
-
-    start_time = time.time()
-
-    # Loading the pretrained encoder ----> For now we are working with ViT pretrained on medical ssl
-    feature_extraction, img_transforms = get_encoder(conf.backbone, pretrain=conf.pretrain)
-    feature_extraction.eval()
-    feat_extractor = feature_extraction.to(conf.device)
-
-    loader_kwargs = {'pin_memory': True} if conf.device.type == "cuda" else {}
-
-    # loading classifier
-    classifier_dict, _, config, _ = load_model(conf.classifier_ckpt_path, args)
+@torch.no_grad()
+def get_classifier(conf):
+    classifier_dict, config = load_model(conf.classifier_ckpt_path, conf.device)
     classifier_conf = SimpleNamespace(**config)
-
-    if conf.classifier_arch == 'hafed':
-        classifier = HAFED(classifier_conf, n_token_1=classifier_conf.n_token_1,
-                           n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1,
-                           n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)
-    else:
-        raise Exception("Select a valid classifier architecture.")
-
+    classifier = HAFED(classifier_conf, n_token_1=classifier_conf.n_token_1, n_token_2=classifier_conf.n_token_2, n_masked_patch_1=classifier_conf.n_masked_patch_1, n_masked_patch_2=classifier_conf.n_masked_patch_2, mask_drop=classifier_conf.mask_drop)
     classifier.to(conf.device)
     classifier.load_state_dict(classifier_dict)
     classifier.eval()
+    return classifier
 
-    # Loading TSU
-    fglobal_dict = torch.load(conf.mlp_fglobal_ckpt, map_location=conf.device)
-    fglobal = FGlobal(ip_dim=384 * 3, op_dim=384).to(conf.device)
-    fglobal.load_state_dict(fglobal_dict['model'])
+@torch.no_grad()
+def get_tsu(conf):
+    fglobal_dict = torch.load(conf.mlp_fglobal_ckpt, map_location=conf.device)['model']
+    fglobal = FGlobal().to(conf.device)
+    fglobal.load_state_dict(fglobal_dict)
     fglobal.eval()
+    return fglobal
 
-    # Loading RL Agent
-    actor = Actor(conf=conf)
-    critic = Critic(conf=conf)
-    model = Agent(actor, critic, conf).to(conf.device)
-    actor_optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, actor.parameters()), lr=0.001)
-    critic_optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, critic.parameters()), lr=0.001)
-    model, actor_optimizer, critic_optimizer, epoch, rl_config = load_policy_model(model, actor_optimizer, critic_optimizer, conf.rl_ckpt_path, conf.device)
-    model.eval()
+@torch.no_grad()
+def evaluate(conf):
 
-    end_time = time.time()
-    time_dict['model_load_time'].append(end_time - start_time)
+    #df to get the true label
+    bags_dataset = Dataset_All_Bags(conf.csv_path)
+    df = bags_dataset.df.set_index('slide_id')
+    
+    # Loading RL agent
+    agent_dict, config = load_agent(conf)
+    agent_conf = SimpleNamespace(**config)
+    actor = Actor(conf=agent_conf)
+    critic  = Critic(conf=agent_conf)
+    agent = Agent(actor, critic, agent_conf).to(conf.device)
+    agent.load_state_dict(agent_dict)
+    agent.to(conf.device)
+    agent.eval()
 
-    # Get the train, validation, test slide names
-    slide_df = pd.read_csv(conf.csv_path)
+    # Loading Classifier (feature aggregator + classifier)
+    classifier = get_classifier(conf)
+
+    # Loading cosine similarity based target state updater
+    tsu = get_tsu(conf)
+
+    # Initializing helper class for inference
+    helper = Helper(conf, classifier)
+
 
     # Now load the train, validation, test slides
     split_file_path = './dataset_csv/%s/splits/split_%s.json' % (conf.dataset, conf.seed)
@@ -216,85 +145,75 @@ def main():
             data = json.load(json_file)
         train_names, val_names, test_names = data['train_names'], data['val_names'], data['test_names']
 
-    else :
+    else:
         raise Exception(f"Please enter a valid split seed for dataset - {conf.dataset} ")
 
+    time_dict = defaultdict(list)
+    y_pred = []
+    y_true = []
+    y_prob = []
 
-    for slide_name in test_names :
-        
+    for slide in test_names:
+
         start_time = time.time()
 
-        # Loading the .h5 file path for slide name 
-        bag_name = slide_name + '.h5'
-        h5_file_path = os.path.join(conf.data_h5_dir, 'patches', bag_name)
-        
-        if not os.path.exists(h5_file_path):
-            raise Exception("Slide name not found")  # This line can be commented out if you want to just continue the process
-            continue
-            
-        slide_file_path = os.path.join(conf.source, slide_name + conf.slide_ext)
-        if os.path.exists(slide_file_path):
-            print("Slide exists")
-        else:
-            raise FileNotFoundError(f"None of the paths exist for slide_id: {slide_name}")
-        
-        # Step 3 - Initializing the result path
-        wsi = openslide.open_slide(slide_file_path)
+        # STEP1 PRE-PROCESSING AND CREATING PATCHES
+        print(f"Evaluating slide: {slide}")
+        print(f"Started Step1: Creating Patches")
+        helper.create_patches(slide, conf.patch_level_low_res, conf.step_size, conf.patch_size)
+        print(f"Completed Step1: Creating Patches")
 
-        # Step 4 - Main Function to read the file **** IMP *** Here focus on __getitem__ function is important
-        dataset = Whole_Slide_Bag_FP(file_path=h5_file_path,
-                                     wsi=wsi,
-                                     img_transforms=img_transforms,
-                                     extract_high_res_features=False,
-                                     patch_level_low_res=args.patch_level_low_res,
-                                     patch_level_high_res=args.patch_level_high_res,
-                                     dataset_name=conf.dataset)
 
-        loader = DataLoader(dataset=dataset, batch_size=args.batch_size_lr, **loader_kwargs)
+        #STEP2 FEATURE EXTRACTION AT LOW RESOLUTION
+        true_label = df.loc[slide]['label']
+        print(f"Started Step2: Extraction Features")
+        feature, coords, wsi = helper.extract_lr_features(slide, true_label, conf.slide_ext, conf.patch_level_low_res, conf.patch_level_high_res)
+        print(f"Completed Step2: Extraction Features")
 
-        # Extract low resolution images
-        state, coords, low_res_feature_time = compute_w_loader(loader=loader, model=feat_extractor, verbose=0, extract_high_res_features = False, device = conf.device)
-        state = torch.from_numpy(state)
-        state = state.to(conf.device)
-        state = state.unsqueeze(0)
 
-        # Load the slide label
-        label = slide_df[slide_df['slide_id'] == slide_name]['label'].item()
-        label = torch.tensor(label, device= conf.device)
-        label = label.unsqueeze(0)
-
-        # Load RL Agent Environment
-        env = WSICosineObservationEnv(lr_features=state, label=label, conf=conf)
-
+        # Step3 RL agent evaluation
+        print(f"Started Step3: Sampling relevant patches using RL")
+        state = torch.tensor(feature, dtype=torch.float32, device=conf.device).unsqueeze(0)
+        true_label = torch.tensor([true_label]).to(conf.device)
+        env = WSICosineObservationEnv_inference(lr_features=state, device=conf.device, frac_visit = conf.frac_visit, cosine_threshold= conf.cosine_threshold)
+        N = state.shape[1]
         visited_patch_id = []
+        visited_patch_coords = []
         done = False
+        pbar = tqdm(total=int(conf.frac_visit*N), desc=f"{slide} RL Sampling Steps", leave=False)
         while not done:
-            action, _, _ = model.get_action(state, visited_patch_id, is_eval=True)
-
-            # Based on action load the high resolution feature
-            hr_feature, hr_coords, hr_total_time = compute_w_loader_2(feat_extractor, dataset.get_high_res_img(coords[action.item()]), conf.device)
-            hr_feature = hr_feature.to(conf.device)
-
-            # Now based on the classification model will go from k x d ----> 1 x d
-            hr_feature = classifier.get_hr_fa(hr_feature)
-
-            new_state, _, done = env.step(action=action, state_update_net=fglobal, classifier_net=classifier, device=conf.device, hr_feature=hr_feature)
-            state = new_state
+            action, log_prob, entropy = agent.get_action(state, visited_patch_id, is_eval=True)
             visited_patch_id.append(action.item())
 
+            # Zoom in to the selected action and extract featues for k patches in high resolution
+            selected_coords = coords[action.item()]
+            visited_patch_coords.append(selected_coords)
+            v_at = helper.get_embedding(selected_coords, wsi, conf.patch_level_low_res, conf.patch_level_high_res, conf.step_size, conf.patch_size)
+            state, done = env.step(action=action.item(),
+                                       v_at=v_at,
+                                       state_update_net=tsu,
+                                       classifier_net=classifier,
+                                       device=conf.device)
+            pbar.update(1)
+
+        pbar.close()
         slide_preds, attn = classifier.classify(state)
         pred = torch.softmax(slide_preds, dim=-1)
+        y_hat = torch.argmax(pred)
+        y_pred.append(y_hat.item())
+        y_true.append(true_label)
+        y_prob.append(pred)
 
-        y_pred.append(pred)
-        y_true.append(label)
-
+        # Just to verify the values
+        # print(y_pred)
+        # print([y.item() for y in y_true])
+        
         end_time = time.time()
 
-        time_dict[f'{slide_name}'].append(end_time - start_time)
-        print(f"Slide time : {time_dict[f'{slide_name}']}")
+        time_dict[f'{slide}'].append(end_time - start_time)
+        print(f"Slide time : {time_dict[f'{slide}']}")
 
-
-    y_pred = torch.cat(y_pred, dim=0)
+    y_pred = torch.cat(y_prob, dim=0)
     y_true = torch.cat(y_true, dim=0)
     y_pred_labels = torch.argmax(y_pred, dim=-1)
 
@@ -322,8 +241,6 @@ def main():
     y_true_np = y_true.cpu().numpy()
     balanced_acc = balanced_accuracy_score(y_true_np, y_pred_np)
 
-    torch.save(time_dict, os.path.join(conf.log_dir, f"time_dict_sasha_{conf.frac_visit}.pt"))
-
     print(f"{'Phase':<6} | {'Acc':<6} | {'AUROC':<6} | {'F1':<6} | {'Precision':<9} | {'Recall':<6} | {'Balanced Acc':<13} ")
     print("-" * 110)
     print(f"{'Test':<6}  | {accuracy:.4f}  | {auroc:.4f}  | {f1_score:.4f}  | {precision:.4f}  | {recall:.4f}  | {balanced_acc:.4f}")
@@ -333,7 +250,16 @@ def main():
         total_time.append(sum(time_dict[key]))
     print(f"Average : {sum(total_time) / len(total_time)}")
 
+    torch.save(time_dict, os.path.join(conf.save_dir, f"time_dict_sasha_{conf.frac_visit}.pt"))
+
 
 if __name__ == '__main__':
-    main()
 
+    args = get_arguments()
+
+    with open(args.config, 'r') as ymlfile:
+        c = yaml.load(ymlfile, Loader=yaml.FullLoader)
+        c.update(vars(args))
+        conf = Struct(**c)
+
+    evaluate(conf)
