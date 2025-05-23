@@ -240,9 +240,10 @@ def main():
                                                                 fglobal, classifier, test_loader,'Test', conf.device,
                                                                 start_epoch, conf)
 
-        best_state = {'epoch': start_epoch, 'val_acc': val_acc, 'val_auc': val_auc, 'val_f1': val_f1, 'test_acc': test_acc,
-                      'test_auc': test_auc, 'test_f1': test_f1,
-                      'test_bal_acc': test_balanced_acc, 'test_precision': test_precision, 'test_recall': test_recall}
+        best_state = {'epoch': start_epoch, 'val_acc': val_acc, 'val_auc': val_auc, 'val_f1': val_f1,
+                      'val_loss': val_loss,
+                      'test_acc': test_acc, 'test_auc': test_auc, 'test_f1': test_f1, 'test_bal_acc': test_balanced_acc,
+                      'test_precision': test_precision, 'test_recall': test_recall, 'test_loss': test_loss}
 
         start_epoch += 1
 
@@ -257,17 +258,20 @@ def main():
         test_auc, test_acc, test_f1, test_loss, test_balanced_acc, test_precision, test_recall = evaluate_policy(model,
                                     fglobal, classifier, test_loader,'Test', conf.device, epoch, conf)
 
-        if val_f1 + val_auc > best_state['val_f1'] + best_state['val_auc']:
+        if (2 - val_auc - val_f1) + val_loss < (2 - best_state['val_auc'] - best_state['val_f1']) + best_state[
+            'val_loss']:
             best_state['epoch'] = epoch
             best_state['val_auc'] = val_auc
             best_state['val_acc'] = val_acc
             best_state['val_f1'] = val_f1
+            best_state['val_loss'] = val_loss
             best_state['test_auc'] = test_auc
             best_state['test_acc'] = test_acc
             best_state['test_f1'] = test_f1
             best_state['test_bal_acc'] = test_balanced_acc
             best_state['test_precision'] = test_precision
             best_state['test_recall'] = test_recall
+            best_state['test_loss'] = test_loss
             save_policy_model(conf=conf, model=model, actor_optimizer=actor_optimizer,
                               critic_optimizer=critic_optimizer, epoch=epoch,
                               save_path=os.path.join(ckpt_dir, 'checkpoint-best.pt'))

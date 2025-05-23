@@ -186,7 +186,7 @@ class Agent(nn.Module):
         return action, value
 
 
-    def evaluate(self, batch_obs, batch_acts): # Changes by Naman
+    def evaluate(self, batch_obs, batch_acts):
         """
         Estimate the values of each observation, and the log probs of
         each action in the most recent batch with the most recent
