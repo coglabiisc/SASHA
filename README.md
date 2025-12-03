@@ -5,6 +5,9 @@
 
 ![Details for HAFED + TSU models](images/hafed_tsu_dig.png)
 
+## Paper Link 
+
+Available at : https://arxiv.org/abs/2507.05077
 
 ## Requirements
 
