@@ -1,24 +1,26 @@
 ## RL hyper parameters
-train_epoch: 25
+train_epoch: 15
 num_envs: 2
 B: 1
 warmup_epoch: 0
 wd: 0.0001
 lr: 0.00001
 min_lr: 0
-
+n_class: 2
 
 # Other Hyper parameters
 explore_frac: 0.05
 gamma: 1.0
-clip: 0.1
+# clip: 0.1
+clip: 0.2 # for sasha 0.1
 entropy_coef: 0.001
 use_entropy_loss: True
 max_grad_norm: 0.5
 num_epochs_on_single_roll_out: 4
 only_ce_as_reward: True
 use_gae: True
-lam: 0.95
+# lam: 0.95
+lam: 0.94 # for sasha 0.1
 
 # Dataset details
 dataset: camelyon16
@@ -32,12 +34,14 @@ D_inner: 128
 
 
 # Model weights -
-frac_visit: 0.2
+frac_visit: 0.1
+# frac_visit: 0.2
 cosine_threshold: 0.95
-classifier_ckpt_path:         # HAFED classifier ckpt path
-mlp_fglobal_ckpt :            # TSU model checkpoint path ---> Need to be same, as cosine threshold paramters is mentioned
-level1_path:                  # HAFED intermediate feature representation path from step 4
-level3_path:                  # Low resolution feature path from step 2
+classifier_ckpt_path:         '/data1/homebackup/tej/project-sasha/sasha/SASHA/sasha_01_use_gae_models_and_logs/hafed13julyseed5rs5/models/DEBUG/checkpoint-best.pt' # HAFED classifier ckpt path
+# mlp_fglobal_ckpt :            '/data1/homebackup/tej/project-sasha/sasha/SASHA/sasha_02_use_gae_models_and_logs/hafed13julytsu951000/models/DEBUG/checkpoint-best.pt' # TSU model checkpoint path ---> Need to be same, as cosine threshold paramters is mentioned
+mlp_fglobal_ckpt :            '/data1/homebackup/tej/project-sasha/sasha/SASHA/sasha_01_use_gae_models_and_logs/hafed13july200tsu95frac1/models/DEBUG/checkpoint-best.pt' # TSU model checkpoint path ---> Need to be same, as cosine threshold paramters is mentioned
+level1_path:                  '/data1/homebackup/tej/project-sasha/sasha/SASHA/sasha_02_use_gae_models_and_logs/hafed13julyintmdtfeat'
+level3_path:                  '/data1/homebackup/tej/project-sasha/sasha/SASHA/camelyon_lr_features'
 
 
 # Restart Training

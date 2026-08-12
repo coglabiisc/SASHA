@@ -1,6 +1,6 @@
 """
 This script initiates the training of the RL Agent component after separately training the HAFED pipeline,
-which includes the Feature Aggregator, Classifier and the Tumor Scoring Unit (TSU).
+which includes the Feature Aggregator, Classifier and the Targeted State Updater (TSU).
 
 During this phase:
 - Pretrained weights for both the Feature Aggregator and TSU are loaded from their respective checkpoints.
@@ -9,7 +9,7 @@ During this phase:
 
 Commands
 CAMELYON16
-python step6_rl_training.py --config config/camelyon_rl_config.yml --seed 4  --log_dir LOG_DIR
+python step6_rl_training.py --config config/camelyon_rl_config.yml --seed 5  --log_dir LOG_DIR
 
 TCGA
 python step6_rl_training.py --config config/tcga_rl_config.yml --seed 1  --log_dir LOG_DIR
@@ -45,9 +45,10 @@ from utils.utils import save_policy_model, Struct, set_seed
 
 
 def get_arguments():
+
     parser = argparse.ArgumentParser('RL training', add_help=False)
     parser.add_argument('--config', default= None, help='path to config file')
-    parser.add_argument('--seed', type=int, default=4, help='set the random seed')
+    parser.add_argument('--seed', type=int, default=5, help='set the seed to select dataset split') 
     parser.add_argument('--classifier_arch', default='hafed', choices=['hafed'], help='choice of architecture for HACMIL')
     parser.add_argument('--exp_name', type=str, default='DEBUG', help='name of the exp')
     parser.add_argument('--logs', default='enabled', choices=['enabled', 'disabled'], type=str, help='flag to save logs')
@@ -109,9 +110,13 @@ def gae(rewards, values, episode_ends, gamma, lam):
     T = rewards.shape[1]
     gae_step = np.zeros((N, ))
     advantages = np.zeros((N, T))
-    for t in reversed(range(T - 1)):
+
+    for t in reversed(range(T)):
+    # for t in reversed(range(T - 1)):
         # First compute delta, which is the one-step TD error
-        delta = rewards[:, t] + gamma * values[:, t + 1] * episode_ends[:, t] - values[:, t]
+        next_values = values[:, t + 1] if (t + 1) < T else 0.0
+        delta = rewards[:, t] + gamma * next_values * episode_ends[:, t] - values[:, t]
+        # delta = rewards[:, t] + gamma * values[:, t + 1] * episode_ends[:, t] - values[:, t]
         # Then compute the current step's GAE by discounting the previous step
         # of GAE, resetting it to zero if the episode ended, and adding this
         # step's delta
@@ -140,7 +145,7 @@ def load_policy_model(model, actor_optimizer, critic_optimizer, load_path, devic
 
     return model, actor_optimizer, critic_optimizer, epoch, config
 
-def main():
+def main(random_seed=11):
     # getting and config file
     args = get_arguments()
 
@@ -184,7 +189,7 @@ def main():
     pprint(vars(conf));
 
     # Loading seed
-    set_seed(args.seed)
+    set_seed(random_seed) # Setting the random seed for reproducibility
 
 
     # dataloaders
@@ -220,11 +225,11 @@ def main():
     actor = Actor(conf=conf)
     critic = Critic(conf=conf)
     model = Agent(actor, critic, conf).to(conf.device)
-    actor_optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, actor.parameters()), lr=0.001, weight_decay=conf.wd)
-    critic_optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, critic.parameters()), lr=0.001, weight_decay=conf.wd)
+    actor_optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, actor.parameters()), lr=conf.lr, weight_decay=conf.wd)
+    critic_optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, critic.parameters()), lr=conf.lr, weight_decay=conf.wd)
 
 
-    best_state = {'epoch': -1, 'val_acc': 0, 'val_auc': 0, 'val_f1': 0, 'test_acc': 0, 'test_auc': 0, 'test_f1': 0,
+    best_state = {'epoch': -1, 'val_acc': 0, 'val_auc': 0, 'val_f1': 0, 'test_acc': 0, 'test_auc': 0, 'test_f1': 0, 'val_loss': 0, 'test_loss': 0,
                   'test_bal_acc': 0, 'test_precision': 0, 'test_recall': 0}
     start_epoch = 0
 
@@ -299,7 +304,7 @@ def train_one_epoch(model, fglobal, classifier, data_loader, actor_optimizer, cr
     epoch_actor_loss = 0
     epoch_critic_loss = 0
     for data_it, data in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         hr_features = data['hr'][0].to(device, dtype=torch.float32)
         state = data['lr'].to(device, dtype=torch.float32).clone()
         label = data['label'].to(device)
@@ -308,8 +313,8 @@ def train_one_epoch(model, fglobal, classifier, data_loader, actor_optimizer, cr
         else:
             env = WSICosineObservationEnv(lr_features=state, hr_features=hr_features, label=label, conf=conf)
 
-        adjust_learning_rate(actor_optimizer, epoch + data_it / len(data_loader), conf)
-        adjust_learning_rate(critic_optimizer, epoch + data_it / len(data_loader), conf)
+        # adjust_learning_rate(actor_optimizer, epoch + data_it / len(data_loader), conf)
+        # adjust_learning_rate(critic_optimizer, epoch + data_it / len(data_loader), conf)
 
         # collecting data as PPO is a onpolicy algorithm
         batch_obs = []
@@ -347,24 +352,28 @@ def train_one_epoch(model, fglobal, classifier, data_loader, actor_optimizer, cr
             batch_acts = torch.tensor(batch_acts, dtype=torch.float, device=conf.device)
             batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float, device=conf.device)
             batch_rtgs = compute_rtgs(batch_rews, conf).to(conf.device)
-            V, _, _ = model.evaluate(batch_obs, batch_acts)
+            V_old, _, _ = model.evaluate(batch_obs, batch_acts)
 
             if conf.use_gae:
-                V = V.view(conf.num_envs, -1).cpu().numpy()
-                dones = np.array(dones).reshape(conf.num_envs, -1)
-                batch_rews = np.array(batch_rews).reshape(conf.num_envs, -1)
-                A_k = gae(rewards=batch_rews, values=V, episode_ends=dones, gamma=conf.gamma, lam=conf.lam)
-                A_k = torch.tensor(A_k, device=conf.device).flatten()
+                V_numpy = V_old.view(conf.num_envs, -1).cpu().numpy()
+                dones_numpy = np.array(dones).reshape(conf.num_envs, -1)
+                rews_numpy = np.array(batch_rews).reshape(conf.num_envs, -1)
+                
+                A_k = gae(rewards=rews_numpy, values=V_numpy, episode_ends=dones_numpy, gamma=conf.gamma, lam=conf.lam)
+                A_k = torch.tensor(A_k, dtype=torch.float, device=conf.device).flatten()
+                
+                # Set the critic target to the GAE returns
+                batch_rtgs = A_k + V_old.detach().flatten()
 
             else:
-                A_k = batch_rtgs - V.detach()
+                A_k = batch_rtgs - V_old.detach().flatten()
 
             A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-8)
 
         # updating parameters for n epochs
 
         for _ in range(conf.num_epochs_on_single_roll_out):
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
             V, curr_log_probs, entropy = model.evaluate(batch_obs, batch_acts)
             ratios = torch.exp(curr_log_probs - batch_log_probs)
 
@@ -372,14 +381,17 @@ def train_one_epoch(model, fglobal, classifier, data_loader, actor_optimizer, cr
             surr1 = ratios * A_k
             surr2 = torch.clamp(ratios, 1 - conf.clip, 1 + conf.clip) * A_k
             actor_loss = (-torch.min(surr1, surr2)).mean()
-            critic_loss = nn.MSELoss()(V, batch_rtgs)
+
+            # Critic loss
+            critic_loss = nn.MSELoss()(V.flatten(), batch_rtgs)
             entropy_loss = entropy.mean()
+
             if conf.use_entropy_loss:
-                actor_loss += conf.entropy_coef * entropy_loss
+                actor_loss -= conf.entropy_coef * entropy_loss
 
             # updating actor
             actor_optimizer.zero_grad()
-            actor_loss.backward(retain_graph=True)
+            actor_loss.backward()
             nn.utils.clip_grad_norm_(model.actor.parameters(), conf.max_grad_norm)
             actor_optimizer.step()
 
@@ -393,8 +405,8 @@ def train_one_epoch(model, fglobal, classifier, data_loader, actor_optimizer, cr
             epoch_critic_loss += critic_loss.item()
 
             # Clear CUDA cache
-            torch.cuda.empty_cache()
-            gc.collect()
+            # torch.cuda.empty_cache()
+            # gc.collect()
 
         metric_logger.update(actor_lr=actor_optimizer.param_groups[0]['lr'])
         metric_logger.update(critic_lr=critic_optimizer.param_groups[0]['lr'])
@@ -405,11 +417,11 @@ def train_one_epoch(model, fglobal, classifier, data_loader, actor_optimizer, cr
             conf.writer.add_scalar("Loss/critic_loss", critic_loss.item(), data_it + (epoch * len(data_loader)))
             conf.writer.add_scalar("Loss/actor_loss", actor_loss.item(), data_it + (epoch * len(data_loader)))
 
-        del batch_obs, batch_acts, batch_log_probs, batch_rtgs, V, curr_log_probs, ratios, surr1, surr2, A_k
+        # del batch_obs, batch_acts, batch_log_probs, batch_rtgs, V, curr_log_probs, ratios, surr1, surr2, A_k
 
-        # Clear CUDA cache
-        torch.cuda.empty_cache()
-        gc.collect()
+        # # Clear CUDA cache
+        # torch.cuda.empty_cache()
+        # gc.collect()
 
     if conf.logs != 'disabled':
         conf.writer.add_scalar("Epoch_Loss/critic_loss", epoch_critic_loss / len(data_loader), epoch)
@@ -491,4 +503,5 @@ def evaluate_policy(model, fglobal, classifier, data_loader, header, device, epo
 
 
 if __name__ == '__main__':
-    main()
+    random_seed = 1130
+    main(random_seed=random_seed)
