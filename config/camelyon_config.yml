@@ -5,7 +5,7 @@ train_epoch: 50           # number of epochs
 B: 1                      # batch size
 warmup_epoch: 0           # number of warm-up epochs
 wd: 0.00001               # weight decay
-lr: 0.0001
+lr: 0.000414
 min_lr: 0
 
 
@@ -19,7 +19,7 @@ n_token_1: 1    #number of models for attention block 1
 n_token_2: 5    # number of models for attention block 2
 n_masked_patch_1: 10    #top-K instances are be randomly masked in STKIM
 n_masked_patch_2: 20
-mask_drop: 0.4
+mask_drop: 0.24
 
 # Dataset
 dataset: camelyon16
