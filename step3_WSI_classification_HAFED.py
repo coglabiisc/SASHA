@@ -17,7 +17,7 @@ TCGA ----> config/tcga_config.yml
 
 Cmd -
 CAMELYON16
-python step3_WSI_classification_HAFED.py --config config/camelyon_config.yml --seed 4 --arch hafed --exp_name DEBUG --log_dir LOG_DIR
+python step3_WSI_classification_HAFED.py --config config/camelyon_config.yml --seed 5 --arch hafed --exp_name DEBUG --log_dir LOG_DIR
 
 TCGA
 python step3_WSI_classification_HAFED.py --config config/tcga_config.yml --seed 1 --arch hafed --exp_name DEBUG --log_dir LOG_DIR
@@ -52,7 +52,7 @@ def get_arguments():
 
     # Primary Arguments for HAFED Training
     parser.add_argument('--config', dest='config', default=None, help='settings of dataset in yaml format')
-    parser.add_argument("--seed", type=int, default=4, help="set the random seed to ensure reproducibility")
+    parser.add_argument("--seed", type=int, default=5, help="set the random seed to ensure reproducibility")
     parser.add_argument("--arch", type=str, default='hafed', choices=['acmil', 'hafed'], help="choice of architecture type")
     parser.add_argument("--exp_name", type=str, default="DEBUG", help="Experiment name")
     parser.add_argument('--ckpt_path', type=str, default=None, help='path to checkpoint file')
@@ -158,7 +158,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # Define optimizer, lr not important at this point
-    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=0.001, weight_decay=conf.wd)
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=conf.lr, weight_decay=conf.wd)
 
 
     # Default initialization to store the best parameters based on f1 + auc
